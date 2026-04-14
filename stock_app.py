@@ -59,40 +59,39 @@ def display_list(target_df, title, prefix, service):
         limit = int(row['設定在庫数（最低数）'])
         is_low = cur < limit
         
-        # 枠線の色：在庫不足なら赤、通常は薄いグレー
-        border_color = "#FF4B4B" if is_low else "#ddd"
-        # 背景色：在庫不足なら薄い赤、通常は白
-        bg_color = "#fff5f5" if is_low else "#ffffff"
-        text_color = "#FF4B4B" if is_low else "#31333F"
-        
-        # --- 枠の出し分け ---
-        # 在庫不足なら「赤い枠（error）」、通常なら「グレーの枠（info）」を表示
-        container = st.error if is_low else st.info
-        
-        with container(icon="⚠️" if is_low else None):
-
-# 画面を左右に分ける箱を準備します
-            col_info, col_btn = st.columns([3, 2])
-        
-        with col_info:
-            # 商品名と「現在数/最低数」を表示（Markdownで色付け）
-            st.markdown(f"**{row['商品名']}** <br> <span style='color:{text_color}; font-size:1.2em;'>{cur}</span>/{limit} <small>{row['単位']}</small>", unsafe_allow_html=True)
-        
-        with col_btn:
-            # ボタンを横に3つ並べる（プラス、マイナス、お気に入り）
-            b1, b2, b3 = st.columns(3)
-            with b1:
-                if st.button("＋", key=f"plus_{prefix}_{index}"):
-                    update_stock(service, index + 2, cur + 1)
-            with b2:
-                if st.button("ー", key=f"minus_{prefix}_{index}"):
-                    update_stock(service, index + 2, max(0, cur - 1))
-            with b3:
-                # お気に入り状態（TRUE/FALSE）を判定してアイコンを変える
-                is_fav = str(row['お気に入り']).upper() == 'TRUE'
-                if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
-                    update_fav(service, index + 2, not is_fav)
-        
+        # 在庫不足なら「赤」、通常なら「青（グレー）」のメッセージ枠を使う
+        # st.error や st.info の中に、さらに columns を入れることで崩れを防ぎます
+        if is_low:
+            # --- 在庫不足（赤枠） ---
+            with st.error(f"⚠️ **{row['商品名']}** は残りわずかです！"):
+                # 枠内でボタンを並べる
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    if st.button("＋", key=f"plus_{prefix}_{index}"):
+                        update_stock(service, index + 2, cur + 1)
+                with c2:
+                    if st.button("ー", key=f"minus_{prefix}_{index}"):
+                        update_stock(service, index + 2, max(0, cur - 1))
+                with c3:
+                    is_fav = str(row['お気に入り']).upper() == 'TRUE'
+                    if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
+                        update_fav(service, index + 2, not is_fav)
+                st.write(f"現在の在庫: **{cur}** / 設定: {limit} {row['単位']}")
+        else:
+            # --- 通常在庫（青/グレー枠） ---
+            with st.info(f"**{row['商品名']}**"):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    if st.button("＋", key=f"plus_{prefix}_{index}"):
+                        update_stock(service, index + 2, cur + 1)
+                with c2:
+                    if st.button("ー", key=f"minus_{prefix}_{index}"):
+                        update_stock(service, index + 2, max(0, cur - 1))
+                with c3:
+                    is_fav = str(row['お気に入り']).upper() == 'TRUE'
+                    if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
+                        update_fav(service, index + 2, not is_fav)
+                st.write(f"現在の在庫: **{cur}** / 設定: {limit} {row['単位']}")
 
 
 # ==========================================
