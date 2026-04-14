@@ -65,28 +65,14 @@ def display_list(target_df, title, prefix, service):
         bg_color = "#fff5f5" if is_low else "#ffffff"
         text_color = "#FF4B4B" if is_low else "#31333F"
         
-        # --- ここから「枠」の中に情報をすべて閉じ込める ---
-        # st.containerを使うことで、中のcolumnsも含めて一塊として扱います
-        with st.container():
-            # 背景色と枠線をHTMLで指定
-            st.markdown(f"""
-                <div style="
-                    border: 1px solid {border_color}; 
-                    border-radius: 10px; 
-                    padding: 10px; 
-                    background-color: {bg_color};
-                    margin-bottom: -45px; /* ボタンを枠の中に引き上げる魔法の数字 */
-                    height: 90px;
-                ">
-                    <p style="margin: 0; font-weight: bold;">{row['商品名']}</p>
-                    <p style="margin: 0; color: {text_color}; font-size: 1.2em;">
-                        <strong>{cur}</strong>/{limit} <small>{row['単位']}</small>
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+        # --- 枠の出し分け ---
+        # 在庫不足なら「赤い枠（error）」、通常なら「グレーの枠（info）」を表示
+        container = st.error if is_low else st.info
+        
+        with container(icon="⚠️" if is_low else None):
 
 # 画面を左右に分ける箱を準備します
-        col_info, col_btn = st.columns([3, 2])
+            col_info, col_btn = st.columns([3, 2])
         
         with col_info:
             # 商品名と「現在数/最低数」を表示（Markdownで色付け）
@@ -107,8 +93,7 @@ def display_list(target_df, title, prefix, service):
                 if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
                     update_fav(service, index + 2, not is_fav)
         
-# 最後に </div> を閉じて枠を終了
-        st.write("")
+
 
 # ==========================================
 # 3. 【司令塔】メインの処理
