@@ -59,40 +59,56 @@ def display_list(target_df, title, prefix, service):
         limit = int(row['設定在庫数（最低数）'])
         is_low = cur < limit
         
-        # 在庫不足なら「赤」、通常なら「青（グレー）」のメッセージ枠を使う
-        # st.error や st.info の中に、さらに columns を入れることで崩れを防ぎます
-        if is_low:
-            # --- 在庫不足（赤枠） ---
-            with st.error(f"⚠️ **{row['商品名']}** は残りわずかです！"):
-                # 枠内でボタンを並べる
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    if st.button("＋", key=f"plus_{prefix}_{index}"):
-                        update_stock(service, index + 2, cur + 1)
-                with c2:
-                    if st.button("ー", key=f"minus_{prefix}_{index}"):
-                        update_stock(service, index + 2, max(0, cur - 1))
-                with c3:
-                    is_fav = str(row['お気に入り']).upper() == 'TRUE'
-                    if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
-                        update_fav(service, index + 2, not is_fav)
-                st.write(f"現在の在庫: **{cur}** / 設定: {limit} {row['単位']}")
-        else:
-            # --- 通常在庫（青/グレー枠） ---
-            with st.info(f"**{row['商品名']}**"):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    if st.button("＋", key=f"plus_{prefix}_{index}"):
-                        update_stock(service, index + 2, cur + 1)
-                with c2:
-                    if st.button("ー", key=f"minus_{prefix}_{index}"):
-                        update_stock(service, index + 2, max(0, cur - 1))
-                with c3:
-                    is_fav = str(row['お気に入り']).upper() == 'TRUE'
-                    if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
-                        update_fav(service, index + 2, not is_fav)
-                st.write(f"現在の在庫: **{cur}** / 設定: {limit} {row['単位']}")
+        # 枠線の色：在庫不足なら赤、通常は薄いグレー
+        border_color = "#FF4B4B" if is_low else "#ddd"
+        # 背景色：在庫不足なら薄い赤、通常は白
+        bg_color = "#fff5f5" if is_low else "#ffffff"
+        text_color = "#FF4B4B" if is_low else "#31333F"
+        
+        # --- ここから「枠」の中に情報をすべて閉じ込める ---
+        # st.containerを使うことで、中のcolumnsも含めて一塊として扱います
+        with st.container():
+            # 背景色と枠線をHTMLで指定
+            st.markdown(f"""
+                <div style="
+                    border: 1px solid {border_color}; 
+                    border-radius: 10px; 
+                    padding: 10px; 
+                    background-color: {bg_color};
+                    margin-bottom: -45px; /* ボタンを枠の中に引き上げる魔法の数字 */
+                    height: 90px;
+                ">
+                    <p style="margin: 0; font-weight: bold;">{row['商品名']}</p>
+                    <p style="margin: 0; color: {text_color}; font-size: 1.2em;">
+                        <strong>{cur}</strong>/{limit} <small>{row['単位']}</small>
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
 
+# 画面を左右に分ける箱を準備します
+        col_info, col_btn = st.columns([3, 2])
+        
+        with col_info:
+            # 商品名と「現在数/最低数」を表示（Markdownで色付け）
+            st.markdown(f"**{row['商品名']}** <br> <span style='color:{text_color}; font-size:1.2em;'>{cur}</span>/{limit} <small>{row['単位']}</small>", unsafe_allow_html=True)
+        
+        with col_btn:
+            # ボタンを横に3つ並べる（プラス、マイナス、お気に入り）
+            b1, b2, b3 = st.columns(3)
+            with b1:
+                if st.button("＋", key=f"plus_{prefix}_{index}"):
+                    update_stock(service, index + 2, cur + 1)
+            with b2:
+                if st.button("ー", key=f"minus_{prefix}_{index}"):
+                    update_stock(service, index + 2, max(0, cur - 1))
+            with b3:
+                # お気に入り状態（TRUE/FALSE）を判定してアイコンを変える
+                is_fav = str(row['お気に入り']).upper() == 'TRUE'
+                if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
+                    update_fav(service, index + 2, not is_fav)
+        
+# 最後に </div> を閉じて枠を終了
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 3. 【司令塔】メインの処理
