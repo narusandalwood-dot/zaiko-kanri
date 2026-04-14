@@ -82,7 +82,7 @@ def display_list(target_df, title, prefix, service):
         
         with col_info:
             # 商品名と「現在数/最低数」を表示（Markdownで色付け）
-            st.markdown(f"**{row['商品名']}** <br> <span style='color:{color}; font-size:1.2em;'>{cur}</span>/{limit} <small>{row['単位']}</small>", unsafe_allow_html=True)
+            st.markdown(f"**{row['商品名']}** <br> <span style='color:{text_color}; font-size:1.2em;'>{cur}</span>/{limit} <small>{row['単位']}</small>", unsafe_allow_html=True)
         
         with col_btn:
             # ボタンを横に3つ並べる（プラス、マイナス、お気に入り）
