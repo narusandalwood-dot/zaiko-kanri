@@ -44,110 +44,129 @@ def get_sheets_service():
 
     return build('sheets', 'v4', credentials=creds)
 
-# --- データの読み込み ---
+# ==========================================
+# 2. 【表示の職人】リストを画面に描く関数
+# ==========================================
+# target_df: 表示したいデータ, title: 見出しの名前, prefix: ボタンの重複防止用, service: 通信用
+def display_list(target_df, title, prefix, service):
+    st.subheader(title)
+    if target_df.empty:
+        st.write("対象となる商品はありません。")
+        return
+
+    # 見出し（スマホで見やすくするため薄い文字で表示）
+    c1, c2 = st.columns([3, 2])
+    with c1: st.caption("商品名 / 在庫状況")
+    with c2: st.caption("操作ボタン")
+
+    # 1件ずつループして表示
+    for index, row in target_df.iterrows():
+        cur = int(row['現在の在庫数'])
+        limit = int(row['設定在庫数（最低数）'])
+        is_low = cur < limit  # 在庫が最低数を下回っているかチェック
+        
+        # 在庫不足なら文字を赤くする設定
+        color = "#FF4B4B" if is_low else "#31333F"
+        
+        # 画面の左側（情報）と右側（ボタン）を分ける
+        col_info, col_btn = st.columns([3, 2])
+        
+        with col_info:
+            # 商品名と「現在数/最低数」を表示（Markdownで色付け）
+            st.markdown(f"**{row['商品名']}** <br> <span style='color:{color}; font-size:1.2em;'>{cur}</span>/{limit} <small>{row['単位']}</small>", unsafe_allow_html=True)
+        
+        with col_btn:
+            # ボタンを横に3つ並べる（プラス、マイナス、お気に入り）
+            b1, b2, b3 = st.columns(3)
+            with b1:
+                if st.button("＋", key=f"plus_{prefix}_{index}"):
+                    update_stock(service, index + 2, cur + 1)
+            with b2:
+                if st.button("ー", key=f"minus_{prefix}_{index}"):
+                    update_stock(service, index + 2, max(0, cur - 1))
+            with b3:
+                # お気に入り状態（TRUE/FALSE）を判定してアイコンを変える
+                is_fav = str(row['お気に入り']).upper() == 'TRUE'
+                if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
+                    update_fav(service, index + 2, not is_fav)
+        
+        st.divider()  # 区切り線
+
+# ==========================================
+# 3. 【司令塔】メインの処理
+# ==========================================
 def main():
-    st.set_page_config(page_title="在庫管理ダッシュボード", layout="wide")
+    st.set_page_config(page_title="在庫管理", layout="wide")
     service = get_sheets_service()
-    sheet = service.spreadsheets()
-
-    # データの読み込み
-    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=RANGE_NAME).execute()
+    
+    # --- スプレッドシートからデータを取ってくる ---
+    result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=RANGE_NAME).execute()
     values = result.get('values', [])
-
     if not values:
         st.error("データが見つかりません。")
         return
 
-    # DataFrameの作成
+    # データを扱いやすい表形式(DataFrame)に変換
     df = pd.DataFrame(values[1:], columns=values[0])
-    # 数値変換
     df['現在の在庫数'] = pd.to_numeric(df['現在の在庫数'], errors='coerce').fillna(0)
     df['設定在庫数（最低数）'] = pd.to_numeric(df['設定在庫数（最低数）'], errors='coerce').fillna(0)
 
-    st.title("🛒 在庫管理ダッシュボード")
+    st.title("🛒 在庫管理アプリ")
 
-    # タブの作成
+    # --- 画面上部にタブ（切り替えボタン）を作成 ---
     t_buy, t_fav, t_all, t_place = st.tabs(["🛍️ 買い物", "⭐ お気に入り", "📦 すべて", "📍 場所別"])
 
-    # --- 各タブの表示ロジック ---
-    def display_list(target_df, title, prefix):
-        st.subheader(title)
-        for index, row in target_df.iterrows():
-            # 在庫不足チェック
-            is_low = row['現在の在庫数'] <= row['設定在庫数（最低数）']
-            bg_color = "#ffe6e6" if is_low else "white"
-            
-            with st.container():
-                st.markdown(f"""
-                <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:1px solid #ddd; margin-bottom:10px;">
-                    <h3 style="margin:0;">{row['商品名']} <small>({row['カテゴリ']})</small></h3>
-                    <p style="margin:5px 0;">場所: {row['場所']} | 在庫: <b>{int(row['現在の在庫数'])}</b> {row['単位']} (最低: {int(row['設定在庫数（最低数）'])})</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
-                with c1:
-            # keyの中に prefix を混ぜることで、タブごとに違う名前になる
-                    if st.button("➕", key=f"plus_{prefix}_{index}"):
-                        update_stock(service, index + 2, int(row['現在の在庫数']) + 1)
-                with c2:
-                    if st.button("➖", key=f"minus_{prefix}_{index}"):
-                        update_stock(service, index + 2, max(0, int(row['現在の在庫数']) - 1))
-                with c3:
-                    fav_icon = "★" if str(row['お気に入り']).upper() == 'TRUE' else "☆"
-                    if st.button(fav_icon, key=f"fav_{prefix}_{index}"):
-                        update_fav(service, index + 2, not (str(row['お気に入り']).upper() == 'TRUE'))
-                with c4:
-                    st.caption(f"更新: {row['最後に更新した人']}")
-
-    # 各タブの中身
+    # 1. 買い物タブ：在庫が足りないものだけ抽出して表示
     with t_buy:
-        buy_df = df[df['現在の在庫数'] <= df['設定在庫数（最低数）']]
-        display_list(buy_df, "買い出しが必要", "buy")
+        buy_df = df[df['現在の在庫数'].astype(int) < df['設定在庫数（最低数）'].astype(int)]
+        display_list(buy_df, "買い出しが必要なもの", "buy", service)
 
+    # 2. お気に入りタブ：H列がTRUEのものだけ抽出して表示
     with t_fav:
         fav_df = df[df['お気に入り'].astype(str).str.upper() == 'TRUE']
-        display_list(fav_df, "お気に入り", "fav")
+        display_list(fav_df, "お気に入りアイテム", "fav", service)
 
+    # 3. すべてタブ：全件表示（カテゴリで絞り込み可能）
     with t_all:
-        cat_choice = st.selectbox("カテゴリ絞り込み", ["すべて"] + list(df['カテゴリ'].unique()))
+        cats = ["すべて"] + sorted(df['カテゴリ'].unique().tolist())
+        cat_choice = st.selectbox("カテゴリを選択", cats)
         all_df = df if cat_choice == "すべて" else df[df['カテゴリ'] == cat_choice]
-        display_list(all_df, "全在庫", "all")
+        display_list(all_df, f"全在庫 ({cat_choice})", "all", service)
 
+    # 4. 場所別タブ：場所（A, B, C...）で選んで表示
     with t_place:
-        place_choice = st.radio("場所を選択", ["A", "B", "C", "D", "E"], horizontal=True)
+        places = sorted(df['場所'].unique().tolist())
+        place_choice = st.radio("場所を選択", places, horizontal=True)
         place_df = df[df['場所'] == place_choice]
-        display_list(place_df, "場所別", "place")
+        display_list(place_df, f"場所 {place_choice} の在庫", "place", service)
 
-# 在庫更新関数（I列, J列も更新するように修正）
+# ==========================================
+# 4. 【書き換えのプロ】スプレッドシートを更新する関数
+# ==========================================
 def update_stock(service, row_idx, new_val):
-    user_name = "ゆるり" # ここをセレクトボックスなどで変えられるようにするとさらに便利
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
+    user_name = "ゆるり"  # 更新した人の名前
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")  # 現在時刻
     
-    # B列(在庫), I列(更新者), J列(日時)を更新
+    # B列（在庫数）を書き換える
     service.spreadsheets().values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f'inventory!B{row_idx}',
-        valueInputOption='USER_ENTERED',
-        body={'values': [[new_val]]}
+        spreadsheetId=SPREADSHEET_ID, range=f'inventory!B{row_idx}',
+        valueInputOption='USER_ENTERED', body={'values': [[new_val]]}
     ).execute()
+    # I列（更新者）とJ列（日時）を書き換える
     service.spreadsheets().values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f'inventory!I{row_idx}:J{row_idx}',
-        valueInputOption='USER_ENTERED',
-        body={'values': [[user_name, now]]}
+        spreadsheetId=SPREADSHEET_ID, range=f'inventory!I{row_idx}:J{row_idx}',
+        valueInputOption='USER_ENTERED', body={'values': [[user_name, now]]}
     ).execute()
-    st.rerun()
+    st.rerun()  # 画面をリフレッシュ
 
-# お気に入り更新関数
 def update_fav(service, row_idx, new_status):
+    # H列（お気に入り）の状態を書き換える
     service.spreadsheets().values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f'inventory!H{row_idx}',
-        valueInputOption='USER_ENTERED',
-        body={'values': [[str(new_status).upper()]]}
+        spreadsheetId=SPREADSHEET_ID, range=f'inventory!H{row_idx}',
+        valueInputOption='USER_ENTERED', body={'values': [[str(new_status).upper()]]}
     ).execute()
     st.rerun()
 
+# --- プログラムのスタート地点 ---
 if __name__ == "__main__":
     main()
