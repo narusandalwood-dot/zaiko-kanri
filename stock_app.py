@@ -70,7 +70,7 @@ def main():
     t_buy, t_fav, t_all, t_place = st.tabs(["🛍️ 買い物", "⭐ お気に入り", "📦 すべて", "📍 場所別"])
 
     # --- 各タブの表示ロジック ---
-    def display_list(target_df, title):
+    def display_list(target_df, title, prefix):
         st.subheader(title)
         for index, row in target_df.iterrows():
             # 在庫不足チェック
@@ -87,38 +87,37 @@ def main():
                 
                 c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
                 with c1:
-                    if st.button("➕", key=f"plus_{index}"):
+            # keyの中に prefix を混ぜることで、タブごとに違う名前になる
+                    if st.button("➕", key=f"plus_{prefix}_{index}"):
                         update_stock(service, index + 2, int(row['現在の在庫数']) + 1)
                 with c2:
-                    if st.button("➖", key=f"minus_{index}"):
+                    if st.button("➖", key=f"minus_{prefix}_{index}"):
                         update_stock(service, index + 2, max(0, int(row['現在の在庫数']) - 1))
                 with c3:
-                    # お気に入りボタン
-                    is_fav = str(row['お気に入り']).upper() == 'TRUE'
-                    fav_icon = "★" if is_fav else "☆"
-                    if st.button(fav_icon, key=f"fav_{index}"):
-                        update_fav(service, index + 2, not is_fav)
+                    fav_icon = "★" if str(row['お気に入り']).upper() == 'TRUE' else "☆"
+                    if st.button(fav_icon, key=f"fav_{prefix}_{index}"):
+                        update_fav(service, index + 2, not (str(row['お気に入り']).upper() == 'TRUE'))
                 with c4:
                     st.caption(f"更新: {row['最後に更新した人']}")
 
     # 各タブの中身
     with t_buy:
         buy_df = df[df['現在の在庫数'] <= df['設定在庫数（最低数）']]
-        display_list(buy_df, "買い出しが必要なもの")
+        display_list(buy_df, "買い出しが必要", "buy")
 
     with t_fav:
         fav_df = df[df['お気に入り'].astype(str).str.upper() == 'TRUE']
-        display_list(fav_df, "お気に入りアイテム")
+        display_list(fav_df, "お気に入り", "fav")
 
     with t_all:
         cat_choice = st.selectbox("カテゴリ絞り込み", ["すべて"] + list(df['カテゴリ'].unique()))
         all_df = df if cat_choice == "すべて" else df[df['カテゴリ'] == cat_choice]
-        display_list(all_df, f"全在庫 ({cat_choice})")
+        display_list(all_df, "全在庫", "all")
 
     with t_place:
         place_choice = st.radio("場所を選択", ["A", "B", "C", "D", "E"], horizontal=True)
         place_df = df[df['場所'] == place_choice]
-        display_list(place_df, f"場所 {place_choice} の在庫")
+        display_list(place_df, "場所別", "place")
 
 # 在庫更新関数（I列, J列も更新するように修正）
 def update_stock(service, row_idx, new_val):
