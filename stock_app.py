@@ -63,6 +63,7 @@ def display_list(target_df, title, prefix, service):
         border_color = "#FF4B4B" if is_low else "#ddd"
         # 背景色：在庫不足なら薄い赤、通常は白
         bg_color = "#fff5f5" if is_low else "#ffffff"
+        text_color = "#FF4B4B" if is_low else "#31333F"
         
         # --- ここから「枠」を作るHTML ---
         st.markdown(f"""
@@ -75,6 +76,9 @@ def display_list(target_df, title, prefix, service):
                 box-shadow: 1px 1px 3px rgba(0,0,0,0.05);
             ">
         """, unsafe_allow_html=True)
+
+# 画面を左右に分ける箱を準備します
+        col_info, col_btn = st.columns([3, 2])
         
         with col_info:
             # 商品名と「現在数/最低数」を表示（Markdownで色付け）
