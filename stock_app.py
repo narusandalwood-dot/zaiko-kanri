@@ -54,22 +54,27 @@ def display_list(target_df, title, prefix, service):
         st.write("対象となる商品はありません。")
         return
 
-    # 見出し（スマホで見やすくするため薄い文字で表示）
-    c1, c2 = st.columns([3, 2])
-    with c1: st.caption("商品名 / 在庫状況")
-    with c2: st.caption("操作ボタン")
-
-    # 1件ずつループして表示
     for index, row in target_df.iterrows():
         cur = int(row['現在の在庫数'])
         limit = int(row['設定在庫数（最低数）'])
-        is_low = cur < limit  # 在庫が最低数を下回っているかチェック
+        is_low = cur < limit
         
-        # 在庫不足なら文字を赤くする設定
-        color = "#FF4B4B" if is_low else "#31333F"
+        # 枠線の色：在庫不足なら赤、通常は薄いグレー
+        border_color = "#FF4B4B" if is_low else "#ddd"
+        # 背景色：在庫不足なら薄い赤、通常は白
+        bg_color = "#fff5f5" if is_low else "#ffffff"
         
-        # 画面の左側（情報）と右側（ボタン）を分ける
-        col_info, col_btn = st.columns([3, 2])
+        # --- ここから「枠」を作るHTML ---
+        st.markdown(f"""
+            <div style="
+                border: 1px solid {border_color}; 
+                border-radius: 10px; 
+                padding: 12px; 
+                margin-bottom: 10px; 
+                background-color: {bg_color};
+                box-shadow: 1px 1px 3px rgba(0,0,0,0.05);
+            ">
+        """, unsafe_allow_html=True)
         
         with col_info:
             # 商品名と「現在数/最低数」を表示（Markdownで色付け）
@@ -90,7 +95,8 @@ def display_list(target_df, title, prefix, service):
                 if st.button("★" if is_fav else "☆", key=f"fav_{prefix}_{index}"):
                     update_fav(service, index + 2, not is_fav)
         
-        st.divider()  # 区切り線
+# 最後に </div> を閉じて枠を終了
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 3. 【司令塔】メインの処理
