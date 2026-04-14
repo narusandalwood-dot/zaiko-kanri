@@ -65,25 +65,17 @@ def display_list(target_df, title, prefix, service):
         bg_color = "#fff5f5" if is_low else "#ffffff"
         text_color = "#FF4B4B" if is_low else "#31333F"
         
-        # --- ここから「枠」の中に情報をすべて閉じ込める ---
-        # st.containerを使うことで、中のcolumnsも含めて一塊として扱います
-        with st.container():
-            # 背景色と枠線をHTMLで指定
-            st.markdown(f"""
-                <div style="
-                    border: 1px solid {border_color}; 
-                    border-radius: 10px; 
-                    padding: 10px; 
-                    background-color: {bg_color};
-                    margin-bottom: -45px; /* ボタンを枠の中に引き上げる魔法の数字 */
-                    height: 90px;
-                ">
-                    <p style="margin: 0; font-weight: bold;">{row['商品名']}</p>
-                    <p style="margin: 0; color: {text_color}; font-size: 1.2em;">
-                        <strong>{cur}</strong>/{limit} <small>{row['単位']}</small>
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+        # --- ここから「枠」を作るHTML ---
+        st.markdown(f"""
+            <div style="
+                border: 1px solid {border_color}; 
+                border-radius: 10px; 
+                padding: 12px; 
+                margin-bottom: 10px; 
+                background-color: {bg_color};
+                box-shadow: 1px 1px 3px rgba(0,0,0,0.05);
+            ">
+        """, unsafe_allow_html=True)
 
 # 画面を左右に分ける箱を準備します
         col_info, col_btn = st.columns([3, 2])
