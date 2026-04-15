@@ -171,18 +171,25 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
             # F:場所, G:お気に入り, H:商品コード, I:RUSH(※不要なら空), J:継続(※空), 
             # K:期待値(※空), L:サイクル, M:画像URL
             # ※お気に入りは修正なら維持、新規ならFalse
+
+            # 🌟 現在の時刻とユーザー名（ゆるりさん）を用意
+            now_str = datetime.now().strftime('%Y/%m/%d %H:%M')
+            user_name = "ゆるり" # シートに合わせて固定、または変数で
+
             row_data = [
-                edit_name,  # A
-                str(edit_cur),   # B
-                str(edit_limit), # C
-                edit_unit,  # D
-                edit_cat,   # E
-                edit_place, # F
-                row['お気に入り'] if is_edit else "FALSE", # G
-                edit_code,  # H
-                "", "", "", # I, J, K (パチンコ計算用列の空き)
-                str(edit_cycle), # L
-                final_img_url    # M
+                edit_name,      # A: 商品名
+                str(edit_cur),  # B: 現在の在庫数
+                str(edit_limit),# C: 設定在庫数（最低数）
+                edit_unit,      # D: 単位
+                edit_cat,       # E: カテゴリ
+                edit_place,     # F: 場所
+                "",             # G: 消費期限（今回は入力なしなら空）
+                edit_code,      # H: 商品コード
+                "FALSE" if not is_edit else row.get('お気に入り', "FALSE"), # I: お気に入り
+                user_name,      # J: 最後に更新した人
+                now_str,        # K: 更新日時
+                str(edit_cycle),# L: サイクル
+                final_img_url   # M: 画像URL
             ]
 
             if is_edit:
