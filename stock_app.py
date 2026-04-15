@@ -121,12 +121,9 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
     img_file = st.camera_input("撮影する", key=f"cam_{index if is_edit else 'new'}")
     
     if img_file:
-        with st.spinner("画像をドライブに保存中..."):
-            # ファイル名は「商品名_日時.jpg」にする（未入力なら temporary_...）
-            f_name = f"{edit_name if 'edit_name' in locals() and edit_name else 'item'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-            new_img_url = upload_image_to_drive(service_drive, img_file, f_name)
-            st.session_state["temp_img_url"] = new_img_url
-            st.success("画像を保存しました！")
+        # 🌟 撮影時はデータだけを一旦保持（まだアップロードしない）
+        st.session_state["temp_img_data"] = img_file
+        st.success("写真を撮影しました（保存ボタンを押すと確定します）")
 
     # --- 4. 入力フォーム（以前の項目をすべて復活） ---
     edit_code  = st.text_input("商品コード（管理番号）", value=d_code)
@@ -154,8 +151,20 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
                 st.error("商品名を入力してください")
                 return
 
-            # 新しく撮った写真があればそれを使い、なければ既存（修正時）のものを使う
-            final_img_url = st.session_state.get("temp_img_url", d_img)
+            with st.spinner("情報を保存中..."):
+            # 保存ボタンが押された「今」の商品名を使ってファイル名を作る
+                new_img_data = st.session_state.get("temp_img_data")
+            
+            if new_img_data:
+                # 商品名 ＋ 日時 でファイル名を作成（空白になりにくい）
+                time_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+                f_name = f"{edit_name}_{time_str}.jpg"
+                
+                # ここで初めてドライブにアップロード
+                final_img_url = upload_image_to_drive(service_drive, new_img_data, f_name)
+            else:
+                # 写真を新しく撮っていない場合は、元のURLを維持
+                final_img_url = d_img
             
             # --- スプレッドシートの列順に合わせてリストを作成（重要！） ---
             # A:商品名, B:現在の在庫数, C:設定在庫数(最低数), D:単位, E:カテゴリ, 
