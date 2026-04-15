@@ -11,6 +11,9 @@ from datetime import datetime, date , timedelta # timedelta  dateを追加（期
 # --- 画像を保存する---
 from googleapiclient.http import MediaIoBaseUpload
 import io
+# --- 画像を表示する---
+import requests  
+from io import BytesIO
 
 # --- Googleドライブの設定 ---
 SPREADSHEET_ID = '1XWnNOEKv5VRhJXxxr923nqPrHlLsF-3lEDl0wYaZpC8'  # URLの d/ と /edit の間の文字列
@@ -82,11 +85,13 @@ def upload_image_to_drive(service_drive, image_file, file_name):
     file = service_drive.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id, webViewLink'
+        fields='id'
     ).execute()
+
+    file_id = file.get('id')
     
-    # 誰でも閲覧できるリンク（直リンクではないが、まずはこれ）を取得
-    return file.get('webViewLink')
+    # webViewLink ではなく、直接画像を表示できる「サムネイル用URL」を返します
+    return f"https://drive.google.com/thumbnail?id={file_id}&sz=w600"
 
 
 # ==========================================
@@ -118,7 +123,18 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
 
     # --- 3. カメラ機能 ---
     st.write("📷 商品写真")
-    img_file = st.camera_input("撮影する", key=f"cam_{index if is_edit else 'new'}")
+    # チェックを入れたときだけカメラを起動させる
+    use_camera = st.checkbox("写真を撮影・更新する")
+
+    img_file = None
+    if use_camera:
+        # label_visibility="collapsed" で余計なラベルを消し、
+        # 外カメラを優先する設定を追加（※ブラウザ側の解釈に依存しますが、指示は出せます）
+        img_file = st.camera_input(
+            "撮影", 
+            key=f"cam_{index if is_edit else 'new'}",
+            label_visibility="collapsed"
+        )
     
     if img_file:
         # 🌟 撮影時はデータだけを一旦保持（まだアップロードしない）
@@ -157,14 +173,12 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
             
             if new_img_data:
                 # 商品名 ＋ 日時 でファイル名を作成（空白になりにくい）
-                time_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-                f_name = f"{edit_name}_{time_str}.jpg"
-                
-                # ここで初めてドライブにアップロード
-                final_img_url = upload_image_to_drive(service_drive, new_img_data, f_name)
-            else:
-                # 写真を新しく撮っていない場合は、元のURLを維持
-                final_img_url = d_img
+                if use_camera and new_img_data:
+                    time_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    f_name = f"{edit_name}_{time_str}.jpg"
+                    final_img_url = upload_image_to_drive(service_drive, new_img_data, f_name)
+                else:
+                    final_img_url = d_img # 撮ってなければ既存のURLを維持
             
             # --- スプレッドシートの列順に合わせてリストを作成（重要！） ---
             # A:商品名, B:現在の在庫数, C:設定在庫数(最低数), D:単位, E:カテゴリ, 
@@ -183,7 +197,7 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
                 edit_unit,      # D: 単位
                 edit_cat,       # E: カテゴリ
                 edit_place,     # F: 場所
-                "",             # G: 消費期限（今回は入力なしなら空）
+                current_expiry,             # G: 消費期限（今回は入力なしなら空）
                 edit_code,      # H: 商品コード
                 "FALSE" if not is_edit else row.get('お気に入り', "FALSE"), # I: お気に入り
                 user_name,      # J: 最後に更新した人
@@ -276,29 +290,51 @@ def display_list(target_df, title, prefix, service_sheets, service_drive):
         else:
             expiry_display = expiry_str
 
+
+
+
         # --- レイアウト作成 ---
         col_info, col_btn = st.columns([4, 2])
         
         with col_info:
-            # --- 画像URLがあるかチェック ---
+            # 1. 画像URLの取得
             img_link = row.get('画像URL')
-            # 画像があればカメラアイコンのリンクを作成、なければ空文字
-            cam_icon = f" [ [📷]({img_link}) ]" if img_link else ""
+            has_image = False # 画像を表示できたかどうかのフラグ
 
-            # 1行目：品名 ＋ カメラアイコン（もしあれば）
-            # cam_icon を最後に追加しています
-            st.markdown(f"{alert_icon}<strong style='font-size:1.1em;'>{row['商品名']}</strong>{cam_icon}", unsafe_allow_html=True)
-            # 2行目：在庫/基準/期限/IDを1行に凝縮
-            # 隙間を詰めるために margin-top をマイナスに設定
+            # 2. 1行目：【画像】と【品名】を横に並べる
+            col_img_icon, col_item_name = st.columns([1, 5])
+            
+            with col_img_icon:
+                # 画像があれば st.image で表示（リンクではないので勝手に立ち上がらない）
+                if img_link and "http" in str(img_link):
+                    try:
+                        response = requests.get(img_link, timeout=5)
+                        if response.status_code == 200:
+                            st.image(BytesIO(response.content), width=50)
+                            has_image = True
+                        else:
+                            st.write("📷") # 読み込み失敗時
+                    except Exception:
+                        st.write("📷") # エラー時
+                else:
+                    st.write("📦") # 画像なし時
+
+            with col_item_name:
+                # 品名を少し大きめに表示（ここにはリンクを入れない）
+                st.markdown(f"{alert_icon}<strong style='font-size:1.1em;'>{row['商品名']}</strong>", unsafe_allow_html=True)
+
+            # 3. 2行目：在庫/基準/期限/ID（1行目の画像と重ならないように位置調整）
+            # 画像がある場合は 65px ずらし、ない場合は 0px
+            margin_left = "60px" if has_image else "0px"
+            
             info_html = f"""
-            <div style='margin-top:-5px; font-size:0.92em; line-height:1.5;'>
+            <div style='margin-top:-5px; font-size:0.92em; line-height:1.5; margin-left:{margin_left};'>
                 <span style='color:#666;'>在庫:</span><span style='color:{text_color}; font-weight:bold;'>{cur}</span>/{limit}{row['単位']} | 
                 <span style='color:#666;'>期限:</span><span style='color:{expiry_color};'>{expiry_display}</span> | 
                 <span style='color:#888;'>ID:{item_code}</span>
             </div>
             """
             st.markdown(info_html, unsafe_allow_html=True)
-
 
 
 # ボタン
