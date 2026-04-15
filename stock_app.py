@@ -298,22 +298,37 @@ def display_list(target_df, title, prefix, service_sheets, service_drive):
         
         with col_info:
             # 1. 画像URLの取得
-            img_link = row.get('画像URL')
-            has_image = False # 画像を表示できたかどうかのフラグ
+            img_link = None
+            try:
+                # まず名前で探してみて、ダメなら12番目の列（M列）を直接見る
+                img_link = row.get('画像URL')
+                if img_link is None or str(img_link) in ["", "nan", "None"]:
+                    img_link = row.iloc[12] # M列を直接指定
+            except:
+                pass
+            
+            # 🌟 ここで「見れないURL」を「見れるURL」に強制変換する
+            if "drive.google.com" in str(img_link) and "thumbnail" not in str(img_link):
+                try:
+                    # URLの中からファイルIDを抜き出す
+                    if "/d/" in str(img_link):
+                        file_id = str(img_link).split("/d/")[1].split("/")[0]
+                        # ゆるりさんが「見れる！」と言ったあの形式に作り変える
+                        img_link = f"https://drive.google.com/thumbnail?id={file_id}&sz=w600"
+                except:
+                    pass # 失敗したら元のURLのまま（後の処理でエラー回避される）
 
+
+            has_image = False
             # 2. 1行目：【画像】と【品名】を横に並べる
-            col_img_icon, col_item_name = st.columns([1, 5])
+            col_img_icon, col_item_name = st.columns([0.4, 5.6])
             
             with col_img_icon:
                 # 画像があれば st.image で表示（リンクではないので勝手に立ち上がらない）
                 if img_link and "http" in str(img_link):
                     try:
-                        response = requests.get(img_link, timeout=5)
-                        if response.status_code == 200:
-                            st.image(BytesIO(response.content), width=50)
-                            has_image = True
-                        else:
-                            st.write("📷") # 読み込み失敗時
+                        st.image(img_link, use_container_width=True)
+                        has_image = True
                     except Exception:
                         st.write("📷") # エラー時
                 else:
@@ -325,7 +340,7 @@ def display_list(target_df, title, prefix, service_sheets, service_drive):
 
             # 3. 2行目：在庫/基準/期限/ID（1行目の画像と重ならないように位置調整）
             # 画像がある場合は 65px ずらし、ない場合は 0px
-            margin_left = "60px" if has_image else "0px"
+            margin_left = "35px" if has_image else "0px"
             
             info_html = f"""
             <div style='margin-top:-5px; font-size:0.92em; line-height:1.5; margin-left:{margin_left};'>
@@ -440,7 +455,7 @@ def main():
     # --- スプレッドシートからデータを取ってくる ---
     result = service_sheets.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID, 
-        range=RANGE_NAME
+        range='inventory!A:M'
     ).execute()
     values = result.get('values', [])
     if not values:
