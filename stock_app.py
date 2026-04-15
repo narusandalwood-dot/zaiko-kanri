@@ -79,7 +79,7 @@ def upload_image_to_drive(service_drive, image_file, file_name):
     )
     
     # アップロード実行
-    file = service.files().create(
+    file = service_drive.files().create(
         body=file_metadata,
         media_body=media,
         fields='id, webViewLink'
