@@ -14,6 +14,9 @@ import io
 # --- 画像を表示する---
 import requests  
 from io import BytesIO
+# --- バーコードスキャン---
+from pyzbar.pyzbar import decode
+from PIL import Image
 
 # --- Googleドライブの設定 ---
 SPREADSHEET_ID = '1XWnNOEKv5VRhJXxxr923nqPrHlLsF-3lEDl0wYaZpC8'  # URLの d/ と /edit の間の文字列
@@ -465,36 +468,65 @@ def show_search_section(df, service_sheets, service_drive):
     # 検索窓とカメラボタンのレイアウト
     search_col1, search_col2 = st.columns([4, 1])
     
+    # セッション状態で検索クエリを管理（バーコード読み取り結果を反映させるため）
+    if "search_query" not in st.session_state:
+        st.session_state.search_query = ""
+
     with search_col1:
         # 手入力検索（商品名、カテゴリ、ID）
-        # ※keyを他と絶対被らない名前にします
-        search_query = st.text_input("キーワード検索", key="global_search_input")
-    
+        search_query = st.text_input(
+            "キーワード検索", 
+            value=st.session_state.search_query, 
+            key="global_search_input_display"
+        )
+        # 入力されたらセッション状態を更新
+        st.session_state.search_query = search_query
+
     with search_col2:
-        # バーコードスキャン用カメラ（スマホだとカメラが立ち上がります）
-        captured_img = st.camera_input("スキャン", key="global_barcode_scanner", label_visibility="collapsed")
+        # 🌟 勝手に起動しないカメラ（ファイルアップローダーを流用）
+        # スマホだと「写真を撮る」が選べ、アウトカメラが起動します
+        captured_file = st.file_uploader(
+            "スキャン", 
+            type=["jpg", "jpeg", "png"], 
+            key="barcode_uploader", 
+            label_visibility="collapsed"
+        )
 
-    # バーコード解析（将来の拡張用。今は画像が撮れるだけ）
-    if captured_img:
-        st.info("💡 カメラが起動しました。バーコード解析には別途ライブラリ設定が必要ですが、現在は手入力検索が可能です。")
+    # 🌟 バーコード解析処理
+    if captured_file is not None:
+        try:
+            img = Image.open(captured_file)
+            detected_barcodes = decode(img)
+            
+            if detected_barcodes:
+                # 最初のバーコードの数字を取り出す
+                barcode_value = detected_barcodes[0].data.decode('utf-8')
+                st.success(f"読み取り成功: {barcode_value}")
+                # 検索クエリをバーコードの値に書き換えて再実行
+                st.session_state.search_query = barcode_value
+                st.rerun() 
+            else:
+                st.warning("バーコードが見つかりませんでした。明るい場所で撮り直してください。")
+        except Exception as e:
+            st.error(f"解析エラー: {e}")
 
-    # 検索の実行
-    if search_query:
+    # 検索の実行（st.session_state.search_query を使用）
+    current_query = st.session_state.search_query
+    if current_query:
         # 全体(df)からヒットするものを抽出
         search_df = df[
-            df['商品名'].str.contains(search_query, na=False, case=False) | 
-            df['カテゴリ'].str.contains(search_query, na=False, case=False) |
-            df['場所'].str.contains(search_query, na=False, case=False) |
-            df['商品コード'].astype(str).str.contains(search_query, na=False)
+            df['商品名'].str.contains(current_query, na=False, case=False) | 
+            df['カテゴリ'].str.contains(current_query, na=False, case=False) |
+            df['場所'].str.contains(current_query, na=False, case=False) |
+            df['商品コード'].astype(str).str.contains(current_query, na=False)
         ]
         
         if not search_df.empty:
             st.success(f"検索結果: {len(search_df)} 件ヒットしました")
-            # 既存の表示関数を使って結果を出す
             display_list(search_df, "🎯 ヒットした商品", "search", service_sheets, service_drive, df)
-            st.divider() # 検索結果の終わりを分かりやすく
+            st.divider() 
         else:
-            st.warning("一致する商品が見つかりませんでした。")
+            st.warning(f"「{current_query}」に一致する商品が見つかりませんでした。")
 
 
 
