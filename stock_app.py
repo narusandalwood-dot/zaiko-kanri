@@ -348,7 +348,7 @@ def render_barcode_scanner(label_target, button_text="バーコードスキャ�
                                 isStreamlitMessage: true,
                                 type: "streamlit:setComponentValue",
                                 key: "barcode_data",
-                                value: val
+                                value: String(val) // 念のため文字列化
                             }}, "*");
                         }}
                         stream.getTracks().forEach(track => track.stop());
