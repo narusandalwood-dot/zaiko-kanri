@@ -532,17 +532,22 @@ def show_search_section(df, service_sheets, service_drive):
     """
     components.html(scan_html, height=100) # 通常時はコンパクト、カメラ起動時に伸びる設定
 
-    # 3. 検索窓（手入力・スキャン結果の受け皿）
+# 🌟 3. ここが修正の核心：スキャン結果を「奪われない」ようにする
+    # 検索窓を作る際、session_state の値を直接反映させる
     input_val = st.text_input(
         "キーワードまたは商品コード", 
         value=st.session_state.search_query, 
-        key="global_search_input_display",
-        placeholder="ここに入力または上のボタンでスキャン"
+        key="global_search_input_display"
     )
 
-    # 4. 手入力があった場合のみセッションを更新
+    # 🌟 4. 「手入力で文字が消された時」だけ空にする。
+    # スキャン結果が入ってきた直後の再実行では、古い空欄データに負けないようにガード。
     if input_val != st.session_state.search_query:
-        st.session_state.search_query = input_val
+        # 手入力が空でも、スキャン直後（valueがまだ反映中）なら無視する
+        if input_val == "" and st.session_state.search_query != "":
+             pass 
+        else:
+             st.session_state.search_query = input_val
 
     # 5. 検索実行と表示
     if st.session_state.search_query:
