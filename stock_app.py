@@ -574,6 +574,12 @@ def show_search_section(df, service_sheets, service_drive):
     #バーコード消える対策
     render_barcode_scanner(label_target=search_label, button_text="📷 バーコード読み取り開始", button_color="#FF4B4B")
     res_search = st.session_state.get("barcode_data")
+    scanned_val = st.session_state.get("barcode_data")
+
+    # 🌟 これを足して、コンソールか画面で中身をチェックしてみてください
+    if scanned_val:
+        st.write(f"デバッグ: 届いた中身は {scanned_val} です。型は {type(scanned_val)} です。")
+
 
     if res_search:
         # 🌟 ここで金庫にバックアップ！
@@ -585,8 +591,9 @@ def show_search_section(df, service_sheets, service_drive):
 
 
     # 毎回クリアボタンを押すたびに key が変わるようにします
-    current_key = "fixed_search_input_field" 
+    current_key = f"global_search_input_{st.session_state.search_reset_counter}"
 
+    # 3. 検索窓（aria-labelをJS側から見つけやすくするためラベルを固定）
     input_val = st.text_input(
         "キーワードまたは商品コード", 
         value=st.session_state.search_query, 
