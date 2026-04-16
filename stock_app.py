@@ -174,20 +174,20 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
     if "temp_scan_code" not in st.session_state:
         st.session_state.temp_scan_code = ""
 
-    # スキャナー呼び出し（一時保存用のキーを指定）
+    # 2. スキャナー呼び出し（宛先を "temp_scan_code" に指定）
     render_barcode_scanner(
         widget_key="temp_scan_code", 
         button_text="📷 バーコードをスキャン", 
         button_color="#4CAF50"
     )
 
-    # 🌟 読み取りが成功していたら「反映ボタン」を出す
+    # 3. 🌟 もし中身が入っていたら表示する
     if st.session_state.temp_scan_code:
-        st.info(f"スキャン結果: {st.session_state.temp_scan_code}")
-        if st.button("✅ この番号を入力欄にセットする"):
-            # 本番の入力欄（session_state）にコピー
+        st.info(f"スキャン成功！: {st.session_state.temp_scan_code}")
+        if st.button("✅ この番号を入力欄に反映する"):
+            # 本番の code_key（form_code_0など）にコピー
             st.session_state[code_key] = st.session_state.temp_scan_code
-            # 一時保存をクリア
+            # 一時保存を空にする
             st.session_state.temp_scan_code = ""
             st.rerun()
 
@@ -327,7 +327,6 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
 def render_barcode_scanner(widget_key, button_text="バーコードスキャン", button_color="#FF4B4B"):
     import streamlit.components.v1 as components
     
-    # 🌟 label_targetは不要になったので削除し、シンプルに
     scan_js = f"""
     <div style="text-align:center;">
         <button id="common-scan-btn" style="width:100%; height:50px; background-color:{button_color}; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer; margin-bottom:10px;">
@@ -337,7 +336,6 @@ def render_barcode_scanner(widget_key, button_text="バーコードスキャン"
             <video id="common-video" style="width:100%; border-radius:10px; border:2px solid {button_color};" playsinline></video>
         </div>
     </div>
-
     <script>
         const btn = document.getElementById('common-scan-btn');
         const video = document.getElementById('common-video');
@@ -355,8 +353,12 @@ def render_barcode_scanner(widget_key, button_text="バーコードスキャン"
                     if (barcodes.length > 0) {{
                         const val = barcodes[0].rawValue;
                         
-                        // 🌟 直接書き込まず、Streamlitの一時変数(widget_key)に値を送るだけ
-                        const msg = {{ type: 'streamlit:set_widget_value', key: '{widget_key}', value: val }};
+                        // 🌟 信号を送る（宛先は widget_key）
+                        const msg = {{ 
+                            type: 'streamlit:set_widget_value', 
+                            key: '{widget_key}', 
+                            value: val 
+                        }};
                         window.parent.postMessage(msg, '*');
 
                         stream.getTracks().forEach(track => track.stop());
