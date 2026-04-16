@@ -585,9 +585,8 @@ def show_search_section(df, service_sheets, service_drive):
 
 
     # 毎回クリアボタンを押すたびに key が変わるようにします
-    current_key = f"global_search_input_{st.session_state.search_reset_counter}"
+    current_key = "fixed_search_input_field" 
 
-    # 3. 検索窓（aria-labelをJS側から見つけやすくするためラベルを固定）
     input_val = st.text_input(
         "キーワードまたは商品コード", 
         value=st.session_state.search_query, 
