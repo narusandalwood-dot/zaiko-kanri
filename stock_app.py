@@ -470,11 +470,11 @@ def show_search_section(df, service_sheets, service_drive):
     search_col1, search_col2 = st.columns([4, 1])
     
     # セッション状態で検索クエリを管理（バーコード読み取り結果を反映させるため）
+# 1. セッションの準備
     if "search_query" not in st.session_state:
         st.session_state.search_query = ""
 
-    # 🌟 2. 爆速ビデオ解析スキャナー（JavaScript）
-    # ボタンを押した瞬間、ビデオが起動して「一瞬のピント」を逃さず数字にします
+    # 🌟 2. 修正：値をセットした後、自動でページを「確定」させる
     scan_html = """
     <div style="text-align:center;">
         <button id="scan-btn" style="width:100%; height:55px; background-color:#FF4B4B; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer; margin-bottom:10px;">
@@ -482,7 +482,6 @@ def show_search_section(df, service_sheets, service_drive):
         </button>
         <div id="v-container" style="display:none; position:relative;">
             <video id="video" style="width:100%; border-radius:10px; border:2px solid #FF4B4B;" playsinline></video>
-            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:80%; height:2px; background:red; box-shadow:0 0 5px red;"></div>
         </div>
     </div>
 
@@ -492,10 +491,6 @@ def show_search_section(df, service_sheets, service_drive):
         const container = document.getElementById('v-container');
 
         btn.onclick = async () => {
-            if (!('BarcodeDetector' in window)) {
-                alert("お使いの端末はビデオ解析非対応です。下の窓に直接入力してください。");
-                return;
-            }
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
@@ -509,13 +504,18 @@ def show_search_section(df, service_sheets, service_drive):
                     const barcodes = await detector.detect(video);
                     if (barcodes.length > 0) {
                         const val = barcodes[0].rawValue;
-                        // Streamlitの入力欄に値を送る（key: global_search_input_display）
-                        window.parent.postMessage({
-                            type: 'streamlit:set_widget_value',
-                            key: 'global_search_input_display',
-                            value: val
-                        }, '*');
                         
+                        // 🌟 ここが核心：入力欄のDOMを取得して直接書き込み、
+                        // 「Enterキー」が押されたイベントを発生させてStreamlitに確定通知を送る
+                        const input = window.parent.document.querySelector('input[aria-label="キーワードまたは商品コード"]');
+                        if (input) {
+                            input.value = val;
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            // 確定させるためのEnterイベント
+                            input.dispatchEvent(new KeyboardEvent('keydown', { 'key': 'Enter', bubbles: true }));
+                        }
+
                         stream.getTracks().forEach(track => track.stop());
                         container.style.display = 'none';
                         btn.style.display = 'block';
@@ -525,29 +525,27 @@ def show_search_section(df, service_sheets, service_drive):
                 };
                 scan();
             } catch (e) {
-                alert("カメラを許可してください");
+                alert("カメラ許可または非対応ブラウザです");
             }
         };
     </script>
     """
-    components.html(scan_html, height=100) # 通常時はコンパクト、カメラ起動時に伸びる設定
+    components.html(scan_html, height=100)
 
-# 🌟 3. ここが修正の核心：スキャン結果を「奪われない」ようにする
-    # 検索窓を作る際、session_state の値を直接反映させる
+    # 3. 検索窓（aria-labelをJS側から見つけやすくするためラベルを固定）
     input_val = st.text_input(
         "キーワードまたは商品コード", 
         value=st.session_state.search_query, 
         key="global_search_input_display"
     )
 
-    # 🌟 4. 「手入力で文字が消された時」だけ空にする。
-    # スキャン結果が入ってきた直後の再実行では、古い空欄データに負けないようにガード。
+    # スキャン結果が届いたらセッションを更新
     if input_val != st.session_state.search_query:
-        # 手入力が空でも、スキャン直後（valueがまだ反映中）なら無視する
-        if input_val == "" and st.session_state.search_query != "":
-             pass 
-        else:
-             st.session_state.search_query = input_val
+        st.session_state.search_query = input_val
+
+    # 4. 手入力があった場合のみセッションを更新
+    if input_val != st.session_state.search_query:
+        st.session_state.search_query = input_val
 
     # 5. 検索実行と表示
     if st.session_state.search_query:
