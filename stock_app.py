@@ -94,11 +94,21 @@ def upload_image_to_drive(service_drive, image_file, file_name):
     return f"https://drive.google.com/thumbnail?id={file_id}&sz=w600"
 
 
+
+
+
+
+
+
+
+
+
+
 # ==========================================
 # 編集関数
 # ==========================================
 @st.dialog("品物情報の登録・修正")
-def item_form_dialog(service_sheets, service_drive, index=None, row=None):
+def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
     # --- 1. モードの判定 ---
     is_edit = index is not None
 
@@ -144,10 +154,39 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
     # --- 4. 入力フォーム（以前の項目をすべて復活） ---
     edit_code  = st.text_input("商品コード（管理番号）", value=d_code)
     edit_name  = st.text_input("商品名（必須）", value=d_name)
-    edit_cat   = st.selectbox("カテゴリ", ["日用品", "食料品", "掃除用品", "その他"], 
-                            index=["日用品", "食料品", "掃除用品", "その他"].index(d_cat) if d_cat in ["日用品", "食料品", "掃除用品", "その他"] else 0)
-    edit_place = st.text_input("保管場所（A, Bなど）", value=d_place)
-    
+  # --- カテゴリの選択 ＋ 新規入力 ---
+    default_cats = ["日用品", "食料品", "掃除用品", "その他"]
+    # 既存のカテゴリを抽出
+    existing_cats = df['カテゴリ'].unique().tolist() if 'カテゴリ' in df.columns else []
+    all_cats = sorted(list(set(default_cats + existing_cats)))
+    cat_options = ["(新規入力)"] + [c for c in all_cats if c]
+
+    selected_cat = st.selectbox(
+        "カテゴリを選択", 
+        options=cat_options,
+        index=cat_options.index(d_cat) if d_cat in cat_options else 0
+    )
+    if selected_cat == "(新規入力)":
+        edit_cat = st.text_input("新しいカテゴリ名を入力", value="")
+    else:
+        edit_cat = selected_cat
+
+    # --- 保管場所の選択 ＋ 新規入力 ---
+    # 既存の場所を抽出
+    existing_places = sorted(df['場所'].unique().tolist()) if '場所' in df.columns else []
+    place_options = ["(新規入力)"] + [p for p in existing_places if p]
+
+    selected_place = st.selectbox(
+        "保管場所を選択", 
+        options=place_options,
+        index=place_options.index(d_place) if d_place in place_options else 0
+    )
+    if selected_place == "(新規入力)":
+        edit_place = st.text_input("新しい保管場所を入力（A, Bなど）", value="")
+    else:
+        edit_place = selected_place
+
+
     col1, col2 = st.columns(2)
     with col1:
         edit_cur   = st.number_input("現在の在庫数", min_value=0, value=d_cur)
@@ -233,11 +272,22 @@ def item_form_dialog(service_sheets, service_drive, index=None, row=None):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 # ==========================================
 # 2. 【表示の職人】リストを画面に描く関数
 # ==========================================
 # target_df: 表示したいデータ, title: 見出しの名前, prefix: ボタンの重複防止用, service: 通信用
-def display_list(target_df, title, prefix, service_sheets, service_drive):
+def display_list(target_df, title, prefix, service_sheets, service_drive, df):
     st.subheader(title)
     if target_df.empty:
         st.write("対象となる商品はありません。")
@@ -389,7 +439,7 @@ def display_list(target_df, title, prefix, service_sheets, service_drive):
             with b3:
                 # 詳細ボタン（クリックで編集用ポップアップを出す）
                 if st.button("📝", key=f"edit_{prefix}_{index}", help="詳細・修正"):
-                    item_form_dialog(service_sheets, service_drive, index, row) # 引数あり
+                    item_form_dialog(service_sheets, service_drive, df, index, row) # 引数あり
                     
             with b4:
                 # バーコードボタン（今はまだ枠だけ）
@@ -402,6 +452,54 @@ def display_list(target_df, title, prefix, service_sheets, service_drive):
     
 # 線を細くして余白をさらに節約
         st.markdown("<hr style='margin:8px 0; border:0; border-top:1px solid #eee;'>", unsafe_allow_html=True)
+
+
+
+
+
+# ==========================================
+# 6. 【検索】キーワードやバーコードで商品を探す関数
+# ==========================================
+def show_search_section(df, service_sheets, service_drive):
+        
+    # 検索窓とカメラボタンのレイアウト
+    search_col1, search_col2 = st.columns([4, 1])
+    
+    with search_col1:
+        # 手入力検索（商品名、カテゴリ、ID）
+        # ※keyを他と絶対被らない名前にします
+        search_query = st.text_input("キーワード検索", key="global_search_input")
+    
+    with search_col2:
+        # バーコードスキャン用カメラ（スマホだとカメラが立ち上がります）
+        captured_img = st.camera_input("スキャン", key="global_barcode_scanner", label_visibility="collapsed")
+
+    # バーコード解析（将来の拡張用。今は画像が撮れるだけ）
+    if captured_img:
+        st.info("💡 カメラが起動しました。バーコード解析には別途ライブラリ設定が必要ですが、現在は手入力検索が可能です。")
+
+    # 検索の実行
+    if search_query:
+        # 全体(df)からヒットするものを抽出
+        search_df = df[
+            df['商品名'].str.contains(search_query, na=False, case=False) | 
+            df['カテゴリ'].str.contains(search_query, na=False, case=False) |
+            df['場所'].str.contains(search_query, na=False, case=False) |
+            df['商品コード'].astype(str).str.contains(search_query, na=False)
+        ]
+        
+        if not search_df.empty:
+            st.success(f"検索結果: {len(search_df)} 件ヒットしました")
+            # 既存の表示関数を使って結果を出す
+            display_list(search_df, "🎯 ヒットした商品", "search", service_sheets, service_drive, df)
+            st.divider() # 検索結果の終わりを分かりやすく
+        else:
+            st.warning("一致する商品が見つかりませんでした。")
+
+
+
+
+
 
 # ==========================================
 # ソートボタン関数
@@ -443,6 +541,10 @@ def apply_sorting_ui(df, prefix):
 
 
 
+
+
+
+
 # ==========================================
 # 3. 【司令塔】メインの処理
 # ==========================================
@@ -474,22 +576,29 @@ def main():
 
     st.title("🛒 在庫管理アプリ")
 
+        # --- 画面上部に検索窓を作成 ---
+    show_search_section(df, service_sheets, service_drive)
+
     # --- 画面上部にタブ（切り替えボタン）を作成 ---
     t_buy, t_fav, t_all, t_place, t_add = st.tabs(["🛍️ 買い物", "⭐ お気に入り", "📦 すべて", "📍 場所別", "➕ 品物追加"])
  
+
+
+
+
     # 1. 買い物タブ：在庫が足りないものだけ抽出して表示
     with t_buy:
         #buy_df = df[df['現在の在庫数'].astype(int) < df['設定在庫数（最低数）'].astype(int)]
         # 買い物リスト変更：在庫不足 OR 期限切れ
         buy_df = df[df['is_low'] | df['is_expired']]
         buy_df = apply_sorting_ui(buy_df, "buy")#ソートボタン---
-        display_list(buy_df, "買い出しが必要なもの", "buy", service_sheets, service_drive)
+        display_list(buy_df, "買い出しが必要なもの", "buy", service_sheets, service_drive, df)
 
     # 2. お気に入りタブ：H列がTRUEのものだけ抽出して表示
     with t_fav:
         fav_df = df[df['お気に入り'].astype(str).str.upper() == 'TRUE']
         fav_df = apply_sorting_ui(fav_df, "fav")#ソートボタン---
-        display_list(fav_df, "お気に入りアイテム", "fav", service_sheets, service_drive)
+        display_list(fav_df, "お気に入りアイテム", "fav", service_sheets, service_drive, df)
 
     # 3. すべてタブ：全件表示（カテゴリで絞り込み可能）
     with t_all:
@@ -504,7 +613,7 @@ def main():
 
         all_df = df if cat_choice == "すべて" else df[df['カテゴリ'] == cat_choice]
         all_df = apply_sorting_ui(all_df, "all")#ソートボタン---
-        display_list(all_df, f"全在庫 ({cat_choice})", "all", service_sheets, service_drive)
+        display_list(all_df, f"全在庫 ({cat_choice})", "all", service_sheets, service_drive, df)
 
     # 4. 場所別タブ：場所（A, B, C...）で選んで表示
     with t_place:
@@ -519,12 +628,12 @@ def main():
 
         place_df = df[df['場所'] == place_choice]
         place_df = apply_sorting_ui(place_df, "place")#ソートボタン---
-        display_list(place_df, f"場所 {place_choice} の在庫", "place", service_sheets, service_drive)
+        display_list(place_df, f"場所 {place_choice} の在庫", "place", service_sheets, service_drive, df)
 
      # 5. 品物追加タブ
     with t_add:
         if st.button("➕ 新しい商品を追加"):
-            item_form_dialog(service_sheets, service_drive) # 引数なし
+            item_form_dialog(service_sheets, service_drive, df) # 引数なし
 
 # ==========================================
 # 4. 【書き換えのプロ】スプレッドシートを更新する関数
