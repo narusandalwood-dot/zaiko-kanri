@@ -494,21 +494,26 @@ def show_search_section(df, service_sheets, service_drive):
 
     # 🌟 バーコード解析処理
     if captured_file is not None:
-        try:
-            img = Image.open(captured_file)
-            detected_barcodes = decode(img)
-            
-            if detected_barcodes:
-                # 最初のバーコードの数字を取り出す
-                barcode_value = detected_barcodes[0].data.decode('utf-8')
-                st.success(f"読み取り成功: {barcode_value}")
-                # 検索クエリをバーコードの値に書き換えて再実行
-                st.session_state.search_query = barcode_value
-                st.rerun() 
-            else:
-                st.warning("バーコードが見つかりませんでした。明るい場所で撮り直してください。")
-        except Exception as e:
-            st.error(f"解析エラー: {e}")
+        with st.spinner("バーコードを解析中..."):
+            try:
+                img = Image.open(captured_file)
+                
+                
+                # スマホの画像はデカすぎるので、解析用に少し小さくする（高速化）
+                img.thumbnail((800, 800))
+                # バーコード解析
+                detected_barcodes = decode(img)
+                if detected_barcodes:
+                    # 最初のバーコードの数字を取り出す
+                    barcode_value = detected_barcodes[0].data.decode('utf-8')
+                    st.success(f"読み取り成功: {barcode_value}")
+                    # 検索クエリをバーコードの値に書き換えて再実行
+                    st.session_state.search_query = barcode_value
+                    st.rerun() 
+                else:
+                    st.warning("バーコードが見つかりませんでした。明るい場所で撮り直してください。")
+            except Exception as e:
+                st.error(f"解析エラー: {e}")
 
     # 検索の実行（st.session_state.search_query を使用）
     current_query = st.session_state.search_query
