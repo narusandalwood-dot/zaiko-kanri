@@ -500,7 +500,8 @@ def show_search_section(df, service_sheets, service_drive):
                 
                 
                 # スマホの画像はデカすぎるので、解析用に少し小さくする（高速化）
-                img.thumbnail((800, 800))
+                img.thumbnail((50, 50))
+
                 # バーコード解析
                 detected_barcodes = decode(img)
                 if detected_barcodes:
