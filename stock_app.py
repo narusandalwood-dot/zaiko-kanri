@@ -480,7 +480,9 @@ def show_search_section(df, service_sheets, service_drive):
             key="global_search_input_display"
         )
         # 入力されたらセッション状態を更新
-        st.session_state.search_query = search_query
+        # 修正：手入力があった「時だけ」セッションを更新する（スキャン結果を消さない）
+        if search_query != st.session_state.search_query:
+            st.session_state.search_query = search_query
 
     with search_col2:
         # 🌟 勝手に起動しないカメラ（ファイルアップローダーを流用）
@@ -500,13 +502,14 @@ def show_search_section(df, service_sheets, service_drive):
                 
                 
                 # スマホの画像はデカすぎるので、解析用に少し小さくする（高速化）
-                img.thumbnail((50, 50))
+                img.thumbnail((500, 500))
 
                 # バーコード解析
                 detected_barcodes = decode(img)
                 if detected_barcodes:
                     # 最初のバーコードの数字を取り出す
                     barcode_value = detected_barcodes[0].data.decode('utf-8')
+                    st.session_state.search_query = barcode_value# ここでスキャン結果をセッションに入れる
                     st.success(f"読み取り成功: {barcode_value}")
                     # 検索クエリをバーコードの値に書き換えて再実行
                     st.session_state.search_query = barcode_value
