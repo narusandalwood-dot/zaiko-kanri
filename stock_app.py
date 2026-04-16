@@ -17,6 +17,7 @@ from io import BytesIO
 # --- バーコードスキャン---
 from pyzbar.pyzbar import decode
 from PIL import Image
+import streamlit.components.v1 as components
 
 # --- Googleドライブの設定 ---
 SPREADSHEET_ID = '1XWnNOEKv5VRhJXxxr923nqPrHlLsF-3lEDl0wYaZpC8'  # URLの d/ と /edit の間の文字列
@@ -472,31 +473,89 @@ def show_search_section(df, service_sheets, service_drive):
     if "search_query" not in st.session_state:
         st.session_state.search_query = ""
 
-    # 🌟 検索窓を画面いっぱいに広げて、タップしやすくする
-    # キーボードが出た時に「バーコードスキャン」を押しやすくするためです
-    search_query = st.text_input(
-        "ここをタップしてバーコードをスキャン 📷", 
+    # 🌟 2. 爆速ビデオ解析スキャナー（JavaScript）
+    # ボタンを押した瞬間、ビデオが起動して「一瞬のピント」を逃さず数字にします
+    scan_html = """
+    <div style="text-align:center;">
+        <button id="scan-btn" style="width:100%; height:55px; background-color:#FF4B4B; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer; margin-bottom:10px;">
+            📷 バーコード読み取り開始
+        </button>
+        <div id="v-container" style="display:none; position:relative;">
+            <video id="video" style="width:100%; border-radius:10px; border:2px solid #FF4B4B;" playsinline></video>
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:80%; height:2px; background:red; box-shadow:0 0 5px red;"></div>
+        </div>
+    </div>
+
+    <script>
+        const btn = document.getElementById('scan-btn');
+        const video = document.getElementById('video');
+        const container = document.getElementById('v-container');
+
+        btn.onclick = async () => {
+            if (!('BarcodeDetector' in window)) {
+                alert("お使いの端末はビデオ解析非対応です。下の窓に直接入力してください。");
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                await video.play();
+                container.style.display = 'block';
+                btn.style.display = 'none';
+
+                const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128'] });
+                
+                const scan = async () => {
+                    const barcodes = await detector.detect(video);
+                    if (barcodes.length > 0) {
+                        const val = barcodes[0].rawValue;
+                        // Streamlitの入力欄に値を送る（key: global_search_input_display）
+                        window.parent.postMessage({
+                            type: 'streamlit:set_widget_value',
+                            key: 'global_search_input_display',
+                            value: val
+                        }, '*');
+                        
+                        stream.getTracks().forEach(track => track.stop());
+                        container.style.display = 'none';
+                        btn.style.display = 'block';
+                    } else {
+                        requestAnimationFrame(scan);
+                    }
+                };
+                scan();
+            } catch (e) {
+                alert("カメラを許可してください");
+            }
+        };
+    </script>
+    """
+    components.html(scan_html, height=100) # 通常時はコンパクト、カメラ起動時に伸びる設定
+
+    # 3. 検索窓（手入力・スキャン結果の受け皿）
+    input_val = st.text_input(
+        "キーワードまたは商品コード", 
         value=st.session_state.search_query, 
         key="global_search_input_display",
-        placeholder="商品名・カテゴリ・コード"
+        placeholder="ここに入力または上のボタンでスキャン"
     )
 
-    # 入力があったら更新
-    if search_query != st.session_state.search_query:
-        st.session_state.search_query = search_query
+    # 4. 手入力があった場合のみセッションを更新
+    if input_val != st.session_state.search_query:
+        st.session_state.search_query = input_val
 
-    # 検索の実行
+    # 5. 検索実行と表示
     if st.session_state.search_query:
-        current_query = st.session_state.search_query
+        q = st.session_state.search_query
         search_df = df[
-            df['商品名'].str.contains(current_query, na=False, case=False) | 
-            df['カテゴリ'].str.contains(current_query, na=False, case=False) |
-            df['場所'].str.contains(current_query, na=False, case=False) |
-            df['商品コード'].astype(str).str.contains(current_query, na=False)
+            df['商品名'].str.contains(q, na=False, case=False) | 
+            df['カテゴリ'].str.contains(q, na=False, case=False) |
+            df['場所'].str.contains(q, na=False, case=False) |
+            df['商品コード'].astype(str).str.contains(q, na=False)
         ]
         
         if not search_df.empty:
-            st.success(f"「{current_query}」の検索結果: {len(search_df)} 件")
+            st.success(f"「{q}」の検索結果: {len(search_df)} 件")
             display_list(search_df, "🎯 検索結果", "search", service_sheets, service_drive, df)
             
             if st.button("検索をクリア"):
@@ -504,7 +563,7 @@ def show_search_section(df, service_sheets, service_drive):
                 st.rerun()
             st.divider() 
         else:
-            st.warning(f"「{current_query}」は見つかりませんでした。")
+            st.warning(f"「{q}」は見つかりませんでした。")
 
 
 
