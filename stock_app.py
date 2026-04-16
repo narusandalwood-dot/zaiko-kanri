@@ -169,8 +169,12 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
     # --- 5. 商品コード（バーコード）入力セクション ---
     code_label = "商品コード（管理番号）"
     code_key = f"form_code_{st.session_state.form_reset_counter}"
-    
-    # 共通スキャナーの配置
+
+    # 🌟 手順①：このKeyに値がまだ無いときだけ、スプレッドシートの値をセットする
+    if code_key not in st.session_state:
+        st.session_state[code_key] = d_code  # row.getで取得した既存の値
+
+    # 🌟 手順②：スキャナー呼び出し（widget_keyを渡す）
     render_barcode_scanner(
         label_target=code_label, 
         widget_key=code_key, 
@@ -178,8 +182,12 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
         button_color="#4CAF50"
     )
 
-    # 入力欄（手入力もスキャン結果もここに入る）
-    edit_code = st.text_input(code_label, value=d_code, key=code_key)
+    # 🌟 手順③：【重要】value=d_code を削除する！！
+    # valueを書かないことで、Streamlitによる「初期値への強制戻し」を封印します
+    edit_code = st.text_input(
+        code_label, 
+        key=code_key  # 値は session_state[code_key] から自動で読み込まれます
+    )
 
     # --- 6. その他の入力フォーム ---
     edit_name = st.text_input("商品名（必須）", value=d_name)
