@@ -574,12 +574,13 @@ def show_search_section(df, service_sheets, service_drive):
     #バーコード消える対策
     render_barcode_scanner(label_target=search_label, button_text="📷 バーコード読み取り開始", button_color="#FF4B4B")
     res_search = st.session_state.get("barcode_data")
+    # 🌟 スマホ画面でデバッグするための「監視モニター」
+    st.warning(f"現在、台帳（session_state）にある値: 『{st.session_state.search_query}』")
+
+    # 🌟 もしJSからポストに何かが届いていたら、それも表示する
     scanned_val = st.session_state.get("barcode_data")
-
-    # 🌟 これを足して、コンソールか画面で中身をチェックしてみてください
     if scanned_val:
-        st.write(f"デバッグ: 届いた中身は {scanned_val} です。型は {type(scanned_val)} です。")
-
+        st.info(f"JSから届いたばかりの値: 『{scanned_val}』")
 
     if res_search:
         # 🌟 ここで金庫にバックアップ！
