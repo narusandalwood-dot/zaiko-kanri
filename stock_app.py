@@ -127,11 +127,11 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
 # --- 商品コード用バーコード関数を配置 ---
     # ラベル名は下の text_input と完全に一致させる必要があります
     code_label = "商品コード（管理番号）"
-    render_barcode_scanner(
-        label_target=code_label, 
-        button_text="📷 バーコードをスキャン", 
-        button_color="#4CAF50" # 登録・修正は緑色
-    )
+    # render_barcode_scanner(
+    #     label_target=code_label, 
+    #     button_text="📷 バーコードをスキャン", 
+    #     button_color="#4CAF50" # 登録・修正は緑色
+    # )
 
 
 
@@ -288,41 +288,6 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
 
 
 
-
-# ==========================================
-# 【共通部品】バーコードスキャナー（JS）を生成する関数
-# ==========================================
-from streamlit_javascript import st_javascript
-
-def render_barcode_scanner(button_text="📷 バーコードを読み取る"):
-    # 🌟 JavaScriptコードを文字列として定義
-    # このJSは、スキャンに成功した瞬間に「数値」を返します
-    code = f"""
-    (async () => {{
-        const detector = new BarcodeDetector({{ formats: ['ean_13', 'ean_8'] }});
-        try {{
-            const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "environment" }} }});
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            await video.play();
-            
-            // スキャンループ
-            while (true) {{
-                const barcodes = await detector.detect(video);
-                if (barcodes.length > 0) {{
-                    stream.getTracks().forEach(t => t.stop());
-                    return barcodes[0].rawValue; // 🌟 ここで数値をPythonに返す！
-                }}
-                await new Promise(r => setTimeout(r, 100));
-            }}
-        }} catch (e) {{
-            return "ERROR: " + e.message;
-        }}
-    }})()
-    """
-    # 🌟 st_javascript を使うと、JSの戻り値が直接 res に入ります
-    res = st_javascript(code)
-    return res
 
 
 
