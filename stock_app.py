@@ -292,89 +292,37 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
 # ==========================================
 # 【共通部品】バーコードスキャナー（JS）を生成する関数
 # ==========================================
-def render_barcode_scanner(label_target, button_text="バーコードスキャン", button_color="#FF4B4B"):
-    
-    """
-    label_target: 値を流し込む対象の text_input の label名
-    button_text: ボタンに表示する文字
-    button_color: ボタンの色
-    """
-    import streamlit.components.v1 as components
-    
-    # JavaScript側で、対象の label を持つ input を探して値をセットするロジック
-    scan_js = f"""
-    <div style="text-align:center;">
-        <button id="common-scan-btn" style="width:100%; height:50px; background-color:{button_color}; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer; margin-bottom:10px;">
-            {button_text}
-        </button>
-        <div id="common-v-container" style="display:none; position:relative;">
-            <video id="common-video" style="width:100%; border-radius:10px; border:2px solid {button_color};" playsinline></video>
-        </div>
-    </div>
+from streamlit_javascript import st_javascript
 
-    <script>
-        const btn = document.getElementById('common-scan-btn');
-        const video = document.getElementById('common-video');
-        const container = document.getElementById('common-v-container');
-
-        
-
-        btn.onclick = async () => {{
-        
-        
-
-
-            if (!('BarcodeDetector' in window)) {{
-                alert("BarcodeDetector非対応のブラウザです（iOS17+のSafariやChromeを推奨）");
-                return;
+def render_barcode_scanner(button_text="📷 バーコードを読み取る"):
+    # 🌟 JavaScriptコードを文字列として定義
+    # このJSは、スキャンに成功した瞬間に「数値」を返します
+    code = f"""
+    (async () => {{
+        const detector = new BarcodeDetector({{ formats: ['ean_13', 'ean_8'] }});
+        try {{
+            const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "environment" }} }});
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            await video.play();
+            
+            // スキャンループ
+            while (true) {{
+                const barcodes = await detector.detect(video);
+                if (barcodes.length > 0) {{
+                    stream.getTracks().forEach(t => t.stop());
+                    return barcodes[0].rawValue; // 🌟 ここで数値をPythonに返す！
+                }}
+                await new Promise(r => setTimeout(r, 100));
             }}
-            try {{
-                const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "environment" }} }});
-                video.srcObject = stream;
-                await video.play();
-                container.style.display = 'block';
-                btn.style.display = 'none';
-
-                const detector = new BarcodeDetector({{ formats: ['ean_13', 'ean_8', 'code_128'] }});
-                
-                const scan = async () => {{
-                    const barcodes = await detector.detect(video);
-                    if (barcodes.length > 0) {{
-                        const val = barcodes[0].rawValue;
-                        
-                        // 🌟 引数で指定された label を持つ入力を親画面から探す
-                        const input = window.parent.document.querySelector('input[aria-label="{label_target}"]');
-                        if (input) {{
-                            input.value = val;
-                            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                            input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                            input.dispatchEvent(new KeyboardEvent('keydown', {{ 'key': 'Enter', bubbles: true }}));
-                       
-                            // バーコード入力数値が消える対策Pythonにも数値をおくる
-                            window.parent.postMessage({{
-                                isStreamlitMessage: true,
-                                type: "streamlit:setComponentValue",
-                                key: "barcode_data",
-                                value: String(val) // 念のため文字列化
-                            }}, "*");
-                        }}
-                        stream.getTracks().forEach(track => track.stop());
-                        container.style.display = 'none';
-                        btn.style.display = 'block';
-                    }} else {{
-                        requestAnimationFrame(scan);
-                    }}
-                }};
-                scan();
-            }} catch (e) {{
-                alert("カメラの起動に失敗しました。許可設定を確認してください。");
-            }}
-        }};
-    </script>
+        }} catch (e) {{
+            return "ERROR: " + e.message;
+        }}
+    }})()
     """
-    return _component_func(label_target=label_target, key="scanner_instance")
-
-
+    # 🌟 st_javascript を使うと、JSの戻り値が直接 res に入ります
+    res = st_javascript(code)
+    return res
 
 
 
@@ -555,7 +503,7 @@ def display_list(target_df, title, prefix, service_sheets, service_drive, df):
 
 
 
-
+from streamlit_javascript import st_javascript
 # ==========================================
 # 6. 【検索】キーワードやバーコードで商品を探す関数
 # ==========================================
@@ -579,26 +527,62 @@ def show_search_section(df, service_sheets, service_drive):
     search_label = "キーワードまたは商品コード"
     #render_barcode_scanner(label_target=search_label, button_text="📷 バーコード読み取り開始", button_color="#FF4B4B")
     #バーコード消える対策
-    render_barcode_scanner(label_target=search_label, button_text="📷 バーコード読み取り開始", button_color="#FF4B4B")
-    res_search = st.session_state.get("barcode_data")
-    # 🌟 スマホ画面でデバッグするための「監視モニター」
-    st.warning(f"現在、台帳（session_state）にある値: 『{st.session_state.search_query}』")
+    # 1. 呼び出す（この res が JS から送られた数値になる）
 
-    # 🌟 もしJSからポストに何かが届いていたら、それも表示する
-    scanned_val = st.session_state.get("barcode_data")
-    if scanned_val:
-        st.info(f"JSから届いたばかりの値: 『{scanned_val}』")
 
-    # 今、保存されている確定データ（台帳）
-        st.warning(f"【確定】台帳（session_state）の値: 『{st.session_state.search_query}』")
+# show_search_section 内で
 
-    if res_search:
-        # 🌟 ここで金庫にバックアップ！
-        st.session_state.search_query = str(res_search)
-        # 🌟 2回連続で同じ処理が走らないよう、使い終わったポストを空にする
-        st.session_state["barcode_data"] = None
-        # 🌟 金庫が更新されたので、画面をリフレッシュして検索窓に反映させる
-        st.rerun()
+    st.subheader("📷 バーコードスキャン")
+    
+    # 🌟 1. 「スキャン開始」ボタンが押された時だけ JS を動かす
+    if st.button("スキャン開始", key="do_scan"):
+        # このJS自体が「スキャンした数値」という結果に化けます
+        js_code = """
+        (async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                await video.play();
+
+                const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8'] });
+                
+                // 最大10秒間探す
+                for (let i = 0; i < 100; i++) {
+                    const barcodes = await detector.detect(video);
+                    if (barcodes.length > 0) {
+                        const val = barcodes[0].rawValue;
+                        stream.getTracks().forEach(t => t.stop());
+                        return val; // 🌟 ここでPythonに直接値を戻す
+                    }
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                stream.getTracks().forEach(t => t.stop());
+                return "TIMEOUT";
+            } catch (e) {
+                return "ERR: " + e.message;
+            }
+        })()
+        """
+        
+        # 🌟 ここで JS から Python への「値の流し込み」が発生します
+        scanned_res = st_javascript(js_code)
+
+        # 🌟 2. 届いた瞬間に「金庫」へ保存して固定する
+        if scanned_res and isinstance(scanned_res, str) and not scanned_res.startswith("ERR") and scanned_res != "TIMEOUT":
+            st.session_state.search_query = scanned_res
+            st.rerun()
+
+    # --- 3. 保存された値を表示（これで消えなくなる） ---
+    st.text_input(
+        "キーワードまたは商品コード",
+        value=st.session_state.get("search_query", ""),
+        key="final_input_field"
+    )
+
+    # 監視モニター
+    if st.session_state.get("search_query"):
+        st.success(f"保存済み数値: {st.session_state.search_query}")
 
 
     # 毎回クリアボタンを押すたびに key が変わるようにします
@@ -611,9 +595,7 @@ def show_search_section(df, service_sheets, service_drive):
         key=current_key
     )
 
-    # スキャン結果が届いたらセッションを更新
-    if input_val != st.session_state.search_query:
-        st.session_state.search_query = input_val
+
 
     # 4. 手入力があった場合のみセッションを更新
     if input_val != st.session_state.search_query:
