@@ -170,32 +170,21 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
     code_label = "商品コード（管理番号）"
     code_key = f"form_code_{st.session_state.form_reset_counter}"
 
-    # 🌟 読み取り値を一時的に保持する場所を用意
-    if "temp_scan_code" not in st.session_state:
-        st.session_state.temp_scan_code = ""
+    # 1. まず初期値をセット（初回のみ）
+    if code_key not in st.session_state:
+        st.session_state[code_key] = d_code
 
-    # 2. スキャナー呼び出し（宛先を "temp_scan_code" に指定）
-    render_barcode_scanner(
-        widget_key="temp_scan_code", 
+    # 2. 🌟 スキャナーを出し、その戻り値を受け取る
+    scanned_val = render_barcode_scanner(
         button_text="📷 バーコードをスキャン", 
         button_color="#4CAF50"
     )
 
-    # 3. 🌟 もし中身が入っていたら表示する
-    if st.session_state.temp_scan_code:
-        st.info(f"スキャン成功！: {st.session_state.temp_scan_code}")
-        if st.button("✅ この番号を入力欄に反映する"):
-            # 本番の code_key（form_code_0など）にコピー
-            st.session_state[code_key] = st.session_state.temp_scan_code
-            # 一時保存を空にする
-            st.session_state.temp_scan_code = ""
-            st.rerun()
+    # 3. 🌟 もしスキャンされたら、即座にセッション状態を上書き
+    if scanned_val:
+        st.session_state[code_key] = scanned_code_val = scanned_val
 
-    # スプレッドシートからの初期値セット（まだ値がない場合のみ）
-    if code_key not in st.session_state:
-        st.session_state[code_key] = d_code
-
-    # 本番の入力欄（valueは指定しないのがコツ）
+    # 4. 入力欄を表示（valueは指定せず、key だけでセッションと同期させる）
     edit_code = st.text_input(code_label, key=code_key)
 
     # --- 6. その他の入力フォーム ---
@@ -324,28 +313,31 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
 # ==========================================
 # 【共通部品】バーコードスキャナー（JS）を生成する関数
 # ==========================================
-def render_barcode_scanner(widget_key, button_text="バーコードスキャン", button_color="#FF4B4B"):
+def render_barcode_scanner(button_text="📷 バーコードスキャン", button_color="#FF4B4B"):
     import streamlit.components.v1 as components
     
+    # JavaScript側を「成功時以外は絶対に何もしない」構造に変更
     scan_js = f"""
-    <div style="text-align:center;">
-        <button id="common-scan-btn" style="width:100%; height:50px; background-color:{button_color}; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer; margin-bottom:10px;">
+    <div id="root" style="text-align:center;">
+        <button id="scan-btn" style="width:100%; height:50px; background-color:{button_color}; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer;">
             {button_text}
         </button>
-        <div id="common-v-container" style="display:none;">
-            <video id="common-video" style="width:100%; border-radius:10px; border:2px solid {button_color};" playsinline></video>
+        <div id="v-container" style="display:none; margin-top:10px;">
+            <video id="video" style="width:100%; border-radius:10px; border:2px solid {button_color};" playsinline></video>
         </div>
     </div>
     <script>
-        const btn = document.getElementById('common-scan-btn');
-        const video = document.getElementById('common-video');
-        const container = document.getElementById('common-v-container');
+        const btn = document.getElementById('scan-btn');
+        const video = document.getElementById('video');
+        const container = document.getElementById('v-container');
 
         btn.onclick = async () => {{
             try {{
                 const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "environment" }} }});
-                video.srcObject = stream; await video.play();
-                container.style.display = 'block'; btn.style.display = 'none';
+                video.srcObject = stream;
+                await video.play();
+                container.style.display = 'block';
+                btn.style.display = 'none';
 
                 const detector = new BarcodeDetector({{ formats: ['ean_13', 'ean_8', 'code_128'] }});
                 const scan = async () => {{
@@ -353,26 +345,29 @@ def render_barcode_scanner(widget_key, button_text="バーコードスキャン"
                     if (barcodes.length > 0) {{
                         const val = barcodes[0].rawValue;
                         
-                        // 🌟 信号を送る（宛先は widget_key）
-                        const msg = {{ 
-                            type: 'streamlit:set_widget_value', 
-                            key: '{widget_key}', 
-                            value: val 
-                        }};
-                        window.parent.postMessage(msg, '*');
-
+                        // 🌟 成功した「瞬間」だけ、1回だけ送る
+                        window.parent.postMessage({{
+                            isStreamlitMessage: true,
+                            type: "streamlit:setComponentValue",
+                            value: val
+                        }}, "*");
+                        
                         stream.getTracks().forEach(track => track.stop());
-                        container.style.display = 'none'; btn.style.display = 'block';
-                    }} else {{ requestAnimationFrame(scan); }}
+                        container.style.display = 'none';
+                        btn.style.display = 'block';
+                    }} else {{
+                        requestAnimationFrame(scan);
+                    }}
                 }};
                 scan();
-            }} catch (e) {{ alert("エラー: " + e); }}
+            }} catch (e) {{ 
+                console.error(e);
+            }}
         }};
     </script>
     """
-    return components.html(scan_js, height=110)
-
-
+    # 🌟 heightを必要最小限に縮め、scanned_val にはデフォルトで None が入るようにする
+    return components.html(scan_js, height=60)
 
 
 
@@ -552,80 +547,85 @@ def display_list(target_df, title, prefix, service_sheets, service_drive, df):
 
 
 
-
 # ==========================================
 # 6. 【検索】キーワードやバーコードで商品を探す関数
 # ==========================================
 def show_search_section(df, service_sheets, service_drive):
-
-    # 🌟 文字は見えないけど、ジャンプ先として機能する「透明な目印」
     st.markdown('<div id="🔍-商品を探す"></div>', unsafe_allow_html=True)
-            
-    # セッション状態で検索クエリを管理（バーコード読み取り結果を反映させるため）
-# 1. セッションの準備
+
+    # --- 1. 状態の初期化 ---
     if "search_query" not in st.session_state:
         st.session_state.search_query = ""
-    # 🌟 リセット管理用のカウンター
     if "search_reset_counter" not in st.session_state:
-        st.session_state.search_reset_counter = 0    
+        st.session_state.search_reset_counter = 0
+    if "show_scanner" not in st.session_state:
+        st.session_state.show_scanner = False
 
-# バーコード読み込み関数（ラベル名を一致させる）
-# 1. 検索ラベルを定義（JSが探す目印）
-    search_label = "キーワードまたは商品コード"
-
-    # 2. 今現在のKeyを生成（0か1か...のカウンター付き）
+    # 現在の入力欄の名札
     search_key = f"global_search_input_{st.session_state.search_reset_counter}"
 
-    # 🌟 label_target=search_label を削除して widget_key から始める
-    render_barcode_scanner(
-        widget_key="temp_scan_code", 
-        button_text="📷 バーコードをスキャン", 
-        button_color="#4CAF50"
-    )   
+    # 初回起動時、箱がなければ空文字を入れておく（TypeError防止）
+    if search_key not in st.session_state:
+        st.session_state[search_key] = st.session_state.search_query
 
-    # 4. 検索窓（input本体）
-    input_val = st.text_input(
-        search_label, 
-        value=st.session_state.search_query, 
-        key=search_key
-    )
+# --- 2. スキャナーの制御 ---
+    if st.session_state.show_scanner:
+            # 🌟 ポイント：変数に代入せず、単独で呼び出す（これで変な文字は表示されません）
+            # 戻り値は「変数への代入」ではなく「関数の戻り値」としてその場で判定します
+            
+            val = render_barcode_scanner(button_text="❌ スキャンを中止")
+            
+            # 🌟 val が「文字列」のときだけ、中身を更新する
+            # (DeltaGenerator などのオブジェクトが入ってきたら無視する)
+            if isinstance(val, str) and val.strip() != "":
+                st.session_state[search_key] = val.strip()
+                st.session_state.search_query = val.strip()
+                st.session_state.show_scanner = False
+                st.rerun()
+            
+            if st.button("キャンセル"):
+                st.session_state.show_scanner = False
+                st.rerun()
+    else:
+        # 通常時は開始ボタンだけを表示（起動時はこれしか動かないので軽い！）
+        if st.button("📷 バーコードで検索"):
+            st.session_state.show_scanner = True
+            st.rerun()
 
-    # スキャン結果が届いたらセッションを更新
+    # --- 3. 検索窓本体 ---
+    input_val = st.text_input("キーワードまたは商品コード", key=search_key)
+
+    # 手入力との同期
     if input_val != st.session_state.search_query:
         st.session_state.search_query = input_val
 
-    # 4. 手入力があった場合のみセッションを更新
-    if input_val != st.session_state.search_query:
-        st.session_state.search_query = input_val
+    # --- 4. 操作ボタン ---
+    if st.button("検索をクリア", use_container_width=True, key="main_clear"):
+        st.session_state.search_query = ""
+        st.session_state.search_reset_counter += 1
+        st.session_state.show_scanner = False # ついでにスキャナーも閉じる
+        st.rerun()
 
-    # 5. 検索実行と表示
-    if st.session_state.search_query:
-        q = st.session_state.search_query
-        search_df = df[
-            df['商品名'].str.contains(q, na=False, case=False) | 
-            df['カテゴリ'].str.contains(q, na=False, case=False) |
-            df['場所'].str.contains(q, na=False, case=False) |
-            df['商品コード'].astype(str).str.contains(q, na=False)
-        ]
+    # --- 5. 検索実行 ---
+    q = st.session_state.search_query
+    # q が None や空文字でないことを確認（ここでも TypeError をガード）
+    if q and isinstance(q, str) and q.strip() != "":
+        q_clean = q.strip()
+        
+        # 安全なマスク作成
+        mask = (
+            df['商品名'].astype(str).str.contains(q_clean, na=False, case=False) | 
+            df['カテゴリ'].astype(str).str.contains(q_clean, na=False, case=False) |
+            df['場所'].astype(str).str.contains(q_clean, na=False, case=False) |
+            df['商品コード'].fillna('').astype(str).str.contains(q_clean, na=False)
+        )
+        search_df = df[mask]
         
         if not search_df.empty:
-            st.success(f"「{q}」の検索結果: {len(search_df)} 件")
+            st.success(f"「{q_clean}」の検索結果: {len(search_df)} 件")
             display_list(search_df, "🎯 検索結果", "search", service_sheets, service_drive, df)
-            
-            if st.button("検索をクリア", key="clear_button"):
-                st.session_state.search_query = ""
-                if st.session_state.search_reset_counter == 0:
-                    st.session_state.search_reset_counter = 1
-                else:
-                    st.session_state.search_reset_counter = 0
-                st.rerun()
-            st.divider() 
         else:
-            st.warning(f"「{q}」は見つかりませんでした。")
-            # 🌟 ヒットしなかった場合もクリアできるようにボタンを置く
-            if st.button("入力をクリア", key="empty_clear_button"):
-                st.session_state.search_query = ""
-                st.rerun()
+            st.warning(f"「{q_clean}」は見つかりませんでした。")
 
 
 
