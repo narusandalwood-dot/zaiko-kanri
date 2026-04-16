@@ -313,30 +313,27 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
 # ==========================================
 # 【共通部品】バーコードスキャナー（JS）を生成する関数
 # ==========================================
-def render_barcode_scanner(button_text="📷 バーコードスキャン", button_color="#FF4B4B"):
+def render_barcode_scanner(widget_key, button_text="📷 バーコードスキャン"):
     import streamlit.components.v1 as components
     
-    # JavaScript側を「成功時以外は絶対に何もしない」構造に変更
     scan_js = f"""
-    <div id="root" style="text-align:center;">
-        <button id="scan-btn" style="width:100%; height:50px; background-color:{button_color}; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer;">
+    <div style="text-align:center;">
+        <button id="scan-btn" style="width:100%; height:50px; background-color:#FF4B4B; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer;">
             {button_text}
         </button>
         <div id="v-container" style="display:none; margin-top:10px;">
-            <video id="video" style="width:100%; border-radius:10px; border:2px solid {button_color};" playsinline></video>
+            <video id="video" style="width:100%; border-radius:10px; border:2px solid #FF4B4B;" playsinline></video>
         </div>
     </div>
     <script>
         const btn = document.getElementById('scan-btn');
-        const video = document.getElementById('video');
-        const container = document.getElementById('v-container');
-
         btn.onclick = async () => {{
             try {{
                 const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "environment" }} }});
+                const video = document.getElementById('video');
                 video.srcObject = stream;
                 await video.play();
-                container.style.display = 'block';
+                document.getElementById('v-container').style.display = 'block';
                 btn.style.display = 'none';
 
                 const detector = new BarcodeDetector({{ formats: ['ean_13', 'ean_8', 'code_128'] }});
@@ -344,31 +341,24 @@ def render_barcode_scanner(button_text="📷 バーコードスキャン", butto
                     const barcodes = await detector.detect(video);
                     if (barcodes.length > 0) {{
                         const val = barcodes[0].rawValue;
-                        
-                        // 🌟 成功した「瞬間」だけ、1回だけ送る
+                        // 🌟 直接Keyを指定して送り込む（Pythonの戻り値を待たない）
                         window.parent.postMessage({{
-                            isStreamlitMessage: true,
-                            type: "streamlit:setComponentValue",
+                            type: 'streamlit:set_widget_value',
+                            key: '{widget_key}',
                             value: val
                         }}, "*");
-                        
                         stream.getTracks().forEach(track => track.stop());
-                        container.style.display = 'none';
+                        document.getElementById('v-container').style.display = 'none';
                         btn.style.display = 'block';
-                    }} else {{
-                        requestAnimationFrame(scan);
-                    }}
+                    }} else {{ requestAnimationFrame(scan); }}
                 }};
                 scan();
-            }} catch (e) {{ 
-                console.error(e);
-            }}
+            }} catch (e) {{ alert("カメラ起動エラー: " + e); }}
         }};
     </script>
     """
-    # 🌟 heightを必要最小限に縮め、scanned_val にはデフォルトで None が入るようにする
-    return components.html(scan_js, height=60)
-
+    # 🌟 returnせずに、ただ「表示」するだけ。これで表示の詰まりが消えます。
+    components.html(scan_js, height=130)
 
 
 
@@ -569,25 +559,16 @@ def show_search_section(df, service_sheets, service_drive):
         st.session_state[search_key] = st.session_state.search_query
 
 # --- 2. スキャナーの制御 ---
-    if st.session_state.show_scanner:
-            # 🌟 ポイント：変数に代入せず、単独で呼び出す（これで変な文字は表示されません）
-            # 戻り値は「変数への代入」ではなく「関数の戻り値」としてその場で判定します
-            
-            val = render_barcode_scanner(button_text="❌ スキャンを中止")
-            
-            # 🌟 val が「文字列」のときだけ、中身を更新する
-            # (DeltaGenerator などのオブジェクトが入ってきたら無視する)
-            if isinstance(val, str) and val.strip() != "":
-                st.session_state[search_key] = val.strip()
-                st.session_state.search_query = val.strip()
-                st.session_state.show_scanner = False
-                st.rerun()
-            
-            if st.button("キャンセル"):
-                st.session_state.show_scanner = False
-                st.rerun()
+# --- 2. スキャナーの制御 ---
+    if st.session_state.get("show_scanner"):
+        # 🌟 修正：変数への代入を絶対にしない！ただ関数を置くだけ。
+        render_barcode_scanner(widget_key=search_key, button_text="❌ 閉じる")
+        
+        # 🌟 ここで「閉じる」ボタンを置くと、スキャン後に手動で閉じられます
+        if st.button("スキャンを終了"):
+            st.session_state.show_scanner = False
+            st.rerun()
     else:
-        # 通常時は開始ボタンだけを表示（起動時はこれしか動かないので軽い！）
         if st.button("📷 バーコードで検索"):
             st.session_state.show_scanner = True
             st.rerun()
