@@ -123,10 +123,6 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
     title = "【修正】" if is_edit else "【新規登録】"
     st.write(f"### {title}")
 
-
-
-
-
     # --- 2. 初期値の設定（修正なら既存データ、新規なら空っぽ・初期値） ---
     # row.get() や row['列名'] を使って、今の値をフォームにセットします
     d_code  = row.get('商品コード（管理番号）', "") 
@@ -138,59 +134,30 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
     d_unit  = row.get('単位', "個")
     d_cycle = int(float(row['サイクル'])) if is_edit and row['サイクル'] else 30
     d_img   = row.get('画像URL', "") if is_edit else ""
-# サイクルの計算（エラー回避用）
-    try:
-        raw_cycle = row.get('サイクル', 30)
-        d_cycle = int(float(raw_cycle)) if raw_cycle else 30
-    except:
-        d_cycle = 30
-    d_img   = row.get('画像URL', "")
 
-    # --- 3. セッションカウンターの準備 ---
-    if 'form_reset_counter' not in st.session_state:
-        st.session_state.form_reset_counter = 0
-
-    # --- 4. 商品写真セクション ---
+    # --- 3. カメラ機能 ---
     st.write("📷 商品写真")
+    # チェックを入れたときだけカメラを起動させる
     use_camera = st.checkbox("写真を撮影・更新する")
+
     img_file = None
     if use_camera:
+        # label_visibility="collapsed" で余計なラベルを消し、
+        # 外カメラを優先する設定を追加（※ブラウザ側の解釈に依存しますが、指示は出せます）
         img_file = st.camera_input(
             "撮影", 
             key=f"cam_{index if is_edit else 'new'}",
             label_visibility="collapsed"
         )
+    
     if img_file:
+        # 🌟 撮影時はデータだけを一旦保持（まだアップロードしない）
         st.session_state["temp_img_data"] = img_file
         st.success("写真を撮影しました（保存ボタンを押すと確定します）")
 
-    st.divider()
-
-    # --- 5. 商品コード（バーコード）入力セクション ---
-    code_label = "商品コード（管理番号）"
-    code_key = f"form_code_{st.session_state.form_reset_counter}"
-
-    # 1. まず初期値をセット（初回のみ）
-    if code_key not in st.session_state:
-        st.session_state[code_key] = d_code
-
-    # 2. 🌟 スキャナーを出し、その戻り値を受け取る
-    scanned_val = render_barcode_scanner(
-        button_text="📷 バーコードをスキャン", 
-        button_color="#4CAF50"
-    )
-
-    # 3. 🌟 もしスキャンされたら、即座にセッション状態を上書き
-    if scanned_val:
-        st.session_state[code_key] = scanned_code_val = scanned_val
-
-    # 4. 入力欄を表示（valueは指定せず、key だけでセッションと同期させる）
-    edit_code = st.text_input(code_label, key=code_key)
-
-    # --- 6. その他の入力フォーム ---
-    edit_name = st.text_input("商品名（必須）", value=d_name)
-
-    
+    # --- 4. 入力フォーム（以前の項目をすべて復活） ---
+    edit_code  = st.text_input("商品コード（管理番号）", value=d_code)
+    edit_name  = st.text_input("商品名（必須）", value=d_name)
   # --- カテゴリの選択 ＋ 新規入力 ---
     default_cats = ["日用品", "食料品", "掃除用品", "その他"]
     # 既存のカテゴリを抽出
@@ -310,53 +277,12 @@ def item_form_dialog(service_sheets, service_drive,df, index=None, row=None):
 
 
 
-# ==========================================
-# 【共通部品】バーコードスキャナー（JS）を生成する関数
-# ==========================================
-def render_barcode_scanner(button_text="📷 バーコードスキャン"):
-    import streamlit.components.v1 as components
-    
-    scan_js = f"""
-    <div style="text-align:center;">
-        <button id="scan-btn" style="width:100%; height:50px; background-color:#FF4B4B; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer;">
-            {button_text}
-        </button>
-        <div id="v-container" style="display:none; margin-top:10px;">
-            <video id="video" style="width:100%; border-radius:10px; border:2px solid #FF4B4B;" playsinline></video>
-        </div>
-    </div>
-    <script>
-        const btn = document.getElementById('scan-btn');
-        const video = document.getElementById('video');
-        const container = document.getElementById('v-container');
 
-        btn.onclick = async () => {{
-            const stream = await navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: "environment" }} }});
-            video.srcObject = stream;
-            await video.play();
-            container.style.display = 'block';
-            btn.style.display = 'none';
 
-            const detector = new BarcodeDetector({{ formats: ['ean_13', 'ean_8', 'code_128'] }});
-            const scan = async () => {{
-                const barcodes = await detector.detect(video);
-                if (barcodes.length > 0) {{
-                    const val = barcodes[0].rawValue;
-                    // 🌟 唯一の仕事：Pythonに値を「正規ルート」で送る
-                    window.parent.postMessage({{
-                        isStreamlitMessage: true,
-                        type: "streamlit:setComponentValue",
-                        value: val
-                    }}, "*");
-                    stream.getTracks().forEach(track => track.stop());
-                }} else {{ requestAnimationFrame(scan); }}
-            }};
-            scan();
-        }};
-    </script>
-    """
-    # 🌟 表示が詰まらないよう、代入せず単体で呼び出す運用にします
-    return components.html(scan_js, height=130)
+
+
+
+
 
 
 
@@ -534,84 +460,114 @@ def display_list(target_df, title, prefix, service_sheets, service_drive, df):
 
 
 
+
 # ==========================================
 # 6. 【検索】キーワードやバーコードで商品を探す関数
 # ==========================================
 def show_search_section(df, service_sheets, service_drive):
-    st.markdown('<div id="🔍-商品を探す"></div>', unsafe_allow_html=True)
-
-    # --- 1. 状態の初期化 ---
+        
+    # 検索窓とカメラボタンのレイアウト
+    search_col1, search_col2 = st.columns([4, 1])
+    
+    # セッション状態で検索クエリを管理（バーコード読み取り結果を反映させるため）
+# 1. セッションの準備
     if "search_query" not in st.session_state:
         st.session_state.search_query = ""
-    if "search_reset_counter" not in st.session_state:
-        st.session_state.search_reset_counter = 0
-    if "show_scanner" not in st.session_state:
-        st.session_state.show_scanner = False
 
-    # 現在の入力欄の名札
-    search_key = f"global_search_input_{st.session_state.search_reset_counter}"
+    # 🌟 2. 修正：値をセットした後、自動でページを「確定」させる
+    scan_html = """
+    <div style="text-align:center;">
+        <button id="scan-btn" style="width:100%; height:55px; background-color:#FF4B4B; color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer; margin-bottom:10px;">
+            📷 バーコード読み取り開始
+        </button>
+        <div id="v-container" style="display:none; position:relative;">
+            <video id="video" style="width:100%; border-radius:10px; border:2px solid #FF4B4B;" playsinline></video>
+        </div>
+    </div>
 
-    # 初回起動時、箱がなければ空文字を入れておく（TypeError防止）
-    search_key = f"global_search_input_{st.session_state.search_reset_counter}"
+    <script>
+        const btn = document.getElementById('scan-btn');
+        const video = document.getElementById('video');
+        const container = document.getElementById('v-container');
 
-    # --- 2. スキャナーの制御（数値を受け取り金庫に入れる） ---
-    if st.session_state.show_scanner:
-        # 🌟 戻り値を変数 res で受ける（widget_keyは使わない）
-        res = render_barcode_scanner(button_text="❌ 中止")
-        
-        # 🌟 値が届いたら、金庫（search_query）に保存して再描画
-        if res and isinstance(res, str):
-            st.session_state.search_query = res.strip()
-            st.session_state.show_scanner = False
-            st.rerun()
-        
-        if st.button("スキャンを終了"):
-            st.session_state.show_scanner = False
-            st.rerun()
-    else:
-        if st.button("📷 バーコードで検索"):
-            st.session_state.show_scanner = True
-            st.rerun()
+        btn.onclick = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                await video.play();
+                container.style.display = 'block';
+                btn.style.display = 'none';
 
-    # --- 3. 検索窓本体（金庫の値を強制表示させる） ---
-    # 🌟 value引数に金庫の中身を紐付けることで、再描画しても消えなくなります
-    q = st.text_input(
+                const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128'] });
+                
+                const scan = async () => {
+                    const barcodes = await detector.detect(video);
+                    if (barcodes.length > 0) {
+                        const val = barcodes[0].rawValue;
+                        
+                        // 🌟 ここが核心：入力欄のDOMを取得して直接書き込み、
+                        // 「Enterキー」が押されたイベントを発生させてStreamlitに確定通知を送る
+                        const input = window.parent.document.querySelector('input[aria-label="キーワードまたは商品コード"]');
+                        if (input) {
+                            input.value = val;
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            // 確定させるためのEnterイベント
+                            input.dispatchEvent(new KeyboardEvent('keydown', { 'key': 'Enter', bubbles: true }));
+                        }
+
+                        stream.getTracks().forEach(track => track.stop());
+                        container.style.display = 'none';
+                        btn.style.display = 'block';
+                    } else {
+                        requestAnimationFrame(scan);
+                    }
+                };
+                scan();
+            } catch (e) {
+                alert("カメラ許可または非対応ブラウザです");
+            }
+        };
+    </script>
+    """
+    components.html(scan_html, height=100)
+
+    # 3. 検索窓（aria-labelをJS側から見つけやすくするためラベルを固定）
+    input_val = st.text_input(
         "キーワードまたは商品コード", 
         value=st.session_state.search_query, 
-        key=search_key
+        key="global_search_input_display"
     )
 
-    # 手入力があった場合は金庫を更新
-    if q != st.session_state.search_query:
-        st.session_state.search_query = q
+    # スキャン結果が届いたらセッションを更新
+    if input_val != st.session_state.search_query:
+        st.session_state.search_query = input_val
 
-    # --- 4. 操作ボタン ---
-    if st.button("検索をクリア", use_container_width=True, key="main_clear"):
-        st.session_state.search_query = ""
-        st.session_state.search_reset_counter += 1
-        st.session_state.show_scanner = False # ついでにスキャナーも閉じる
-        st.rerun()
+    # 4. 手入力があった場合のみセッションを更新
+    if input_val != st.session_state.search_query:
+        st.session_state.search_query = input_val
 
-    # --- 5. 検索実行 ---
-    q = st.session_state.search_query
-    # q が None や空文字でないことを確認（ここでも TypeError をガード）
-    if q and isinstance(q, str) and q.strip() != "":
-        q_clean = q.strip()
-        
-        # 安全なマスク作成
-        mask = (
-            df['商品名'].astype(str).str.contains(q_clean, na=False, case=False) | 
-            df['カテゴリ'].astype(str).str.contains(q_clean, na=False, case=False) |
-            df['場所'].astype(str).str.contains(q_clean, na=False, case=False) |
-            df['商品コード'].fillna('').astype(str).str.contains(q_clean, na=False)
-        )
-        search_df = df[mask]
+    # 5. 検索実行と表示
+    if st.session_state.search_query:
+        q = st.session_state.search_query
+        search_df = df[
+            df['商品名'].str.contains(q, na=False, case=False) | 
+            df['カテゴリ'].str.contains(q, na=False, case=False) |
+            df['場所'].str.contains(q, na=False, case=False) |
+            df['商品コード'].astype(str).str.contains(q, na=False)
+        ]
         
         if not search_df.empty:
-            st.success(f"「{q_clean}」の検索結果: {len(search_df)} 件")
+            st.success(f"「{q}」の検索結果: {len(search_df)} 件")
             display_list(search_df, "🎯 検索結果", "search", service_sheets, service_drive, df)
+            
+            if st.button("検索をクリア"):
+                st.session_state.search_query = ""
+                st.rerun()
+            st.divider() 
         else:
-            st.warning(f"「{q_clean}」は見つかりませんでした。")
+            st.warning(f"「{q}」は見つかりませんでした。")
+
 
 
 
@@ -691,39 +647,9 @@ def main():
 
     st.title("🛒 在庫管理アプリ")
 
-
-
-
-# 画面右下のトップへ戻るボタン
-    st.markdown(
-    """
-    <style>
-    .back-to-top {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background-color: #FF4B4B;
-        color: white;
-        padding: 10px 15px;
-        border-radius: 50%;
-        text-decoration: none;
-        z-index: 999;
-        font-weight: bold;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-    }
-    </style>
-    <a href="#🔍-商品を探す" class="back-to-top">▲</a>
-    """,
-    unsafe_allow_html=True
-    )
-
-
-
-
         # --- 画面上部に検索窓を作成 ---
     show_search_section(df, service_sheets, service_drive)
 
-    
     # --- 画面上部にタブ（切り替えボタン）を作成 ---
     t_buy, t_fav, t_all, t_place, t_add = st.tabs(["🛍️ 買い物", "⭐ お気に入り", "📦 すべて", "📍 場所別", "➕ 品物追加"])
  
